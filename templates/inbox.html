@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Inbox{% endblock %}
+{% block crumb %}Inbox{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>Inbox</h1><p>Messages from your Team Lead.</p></div></div>
+<div class="form-width">
+{% for item in feed %}<article class="panel padded message-card"><div class="split"><div><h2>{{ item.sender.user.get_full_name }}</h2><small>{{ item.team }} · {{ item.created_at|date:"j M Y, H:i" }}</small></div>{% if not item.read_at %}<span class="badge teal">Unread</span>{% endif %}</div><p>{{ item.body|linebreaksbr }}</p>{% if not item.read_at %}<form method="post" action="{% url 'read_message' item.pk %}">{% csrf_token %}<button class="button secondary small">Mark as read</button></form>{% endif %}</article>
+{% empty %}<p class="panel empty">Your inbox is empty.</p>{% endfor %}
+</div>
+{% endblock %}

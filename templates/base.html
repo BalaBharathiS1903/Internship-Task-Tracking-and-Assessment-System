@@ -1,0 +1,64 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#1e1b60">
+  <title>{% block title %}Workspace{% endblock %} · Internship Desk | DefineInfoTech</title>
+  <link rel="icon" type="image/png" href="{% static 'defineinfotech-icon.png' %}">
+  <link rel="stylesheet" href="{% static 'desk.css' %}">
+</head>
+<body>
+{% if user.is_authenticated %}
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{% url 'dashboard' %}">
+      <img class="brand-mark" src="{% static 'defineinfotech-icon.png' %}" width="40" height="40" alt="">
+      <span>Internship Desk<small>DefineInfoTech</small></span>
+    </a>
+    <nav aria-label="Main navigation">
+      <div class="nav-group">
+        <p>Workspace</p>
+        <a href="{% url 'dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}><span aria-hidden="true">◫</span> Overview</a>
+        {% if coordinator %}
+        <a href="{% url 'roster' %}" {% if request.resolver_match.url_name == 'roster' %}aria-current="page"{% endif %}><span aria-hidden="true">♙</span> Intern master</a>
+        <a href="{% url 'registry' %}" {% if request.resolver_match.url_name == 'registry' %}aria-current="page"{% endif %}><span aria-hidden="true">◇</span> Cohorts &amp; setup</a>
+        {% else %}
+        <a href="{% url 'profile' %}" {% if request.resolver_match.url_name == 'profile' %}aria-current="page"{% endif %}><span aria-hidden="true">♙</span> My profile</a>
+        {% endif %}
+        <a href="{% url 'tasks' %}" {% if request.resolver_match.url_name == 'tasks' %}aria-current="page"{% endif %}><span aria-hidden="true">☷</span> {% if coordinator %}Task tracker{% else %}My work{% endif %}</a>
+        {% if team_lead %}<a href="{% url 'team' %}" {% if request.resolver_match.url_name == 'team' %}aria-current="page"{% endif %}><span aria-hidden="true">♧</span> Team workspace</a>{% endif %}
+      </div>
+      <div class="nav-group">
+        <p>{% if coordinator %}Operations{% else %}Records{% endif %}</p>
+        <a href="{% url 'attendance' %}" {% if request.resolver_match.url_name == 'attendance' %}aria-current="page"{% endif %}><span aria-hidden="true">▦</span> Attendance</a>
+        <a href="{% url 'assessments' %}" {% if request.resolver_match.url_name == 'assessments' %}aria-current="page"{% endif %}><span aria-hidden="true">☆</span> {% if coordinator %}Assessments{% else %}My results{% endif %}</a>
+        {% if intern_profile %}<a href="{% url 'inbox' %}" {% if request.resolver_match.url_name == 'inbox' %}aria-current="page"{% endif %}><span aria-hidden="true">✉</span> Inbox</a>{% endif %}
+        <a href="{% url 'imports' %}" {% if request.resolver_match.url_name == 'imports' %}aria-current="page"{% endif %}><span aria-hidden="true">⇧</span> Upload center</a>
+        {% if coordinator %}<a href="{% url 'reports' %}" {% if request.resolver_match.url_name == 'reports' %}aria-current="page"{% endif %}><span aria-hidden="true">▤</span> Reports</a>{% endif %}
+      </div>
+    </nav>
+    <div class="sidebar-end">
+      <a href="{% url 'guide' %}"><span aria-hidden="true">ⓘ</span> User guide</a>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit"><span aria-hidden="true">⇥</span> Sign out</button></form>
+    </div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar">
+      <span>Internship operations <span aria-hidden="true">/</span> <strong>{% block crumb %}Workspace{% endblock %}</strong></span>
+      <div class="account"><span class="avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|slice:":1"|upper }}</span><div><strong>{{ user.get_full_name|default:user.username }}</strong><small>{% if coordinator %}Coordinator{% elif team_lead %}Intern · Team Lead{% else %}{{ intern_profile.dit_id|default:"Intern" }}{% endif %}</small></div></div>
+    </header>
+    <main class="main" id="main">
+{% else %}
+    <main class="public" id="main">
+{% endif %}
+      {% if messages %}<div class="alerts" aria-live="polite">
+        {% for message in messages %}<div class="alert {{ message.tags }}">{{ message }}</div>{% endfor %}
+      </div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+{% if user.is_authenticated %}</div></div>{% endif %}
+</body>
+</html>

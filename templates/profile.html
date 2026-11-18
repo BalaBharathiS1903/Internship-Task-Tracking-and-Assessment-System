@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}My profile{% endblock %}
+{% block crumb %}My profile{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>My profile</h1><p>{{ intern_profile.dit_id }} · {{ user.get_full_name }}</p></div></div>
+<div class="card-grid">{% for item in memberships %}
+<section class="panel padded"><h2>{{ item.cohort }}</h2><dl class="detail-list"><div><dt>Assigned domain</dt><dd>{{ item.domain }}</dd></div><div><dt>Team</dt><dd>{{ item.team|default:"Unassigned" }}</dd></div>{% if item.is_lead %}<div><dt>Team designation</dt><dd>Team Lead</dd></div>{% endif %}</dl>
+<form method="post" class="stack">{% csrf_token %}<input type="hidden" name="enrollment" value="{{ item.pk }}"><label>Domain preference<select name="domain" required><option value="">Select a preference</option>{% for option in item.cohort.domains.all %}<option value="{{ option.pk }}" {% if item.preferred_domain_id == option.pk %}selected{% endif %}>{{ option }}</option>{% endfor %}</select></label><button class="button secondary">Save preference</button></form>
+</section>{% empty %}<p>No enrollment is linked to this account.</p>{% endfor %}</div>
+{% endblock %}

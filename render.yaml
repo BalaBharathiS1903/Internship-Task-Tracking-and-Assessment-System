@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: internship-desk
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate --noinput && python manage.py bootstrap_coordinator && exec gunicorn config.wsgi:application --bind "0.0.0.0:${PORT}" --workers 1 --threads 4
+    healthCheckPath: /healthz/
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "0"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_SUPERUSER_USERNAME
+        value: coordinator
+      - key: DJANGO_SUPERUSER_PASSWORD
+        generateValue: true
+      - key: DJANGO_SQLITE_DEMO
+        value: "1"

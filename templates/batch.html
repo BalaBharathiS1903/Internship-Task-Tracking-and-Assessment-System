@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Import preview{% endblock %}
+{% block crumb %}Upload center{% endblock %}
+{% block content %}
+<a class="text-link back" href="{% url 'imports' %}">← Upload center</a>
+<div class="page-heading"><div><h1>{% if batch.committed_at %}Import receipt{% else %}Import preview{% endif %}</h1><p>{{ label }} · {{ batch.filename }}</p></div><div class="actions">
+{% if errors %}<a class="button secondary" href="{% url 'batch_errors' batch.pk %}">Download row errors</a><a class="button primary" href="{% url 'new_batch' batch.kind %}">Upload corrected file</a>
+{% elif not batch.committed_at %}<form method="post">{% csrf_token %}<button class="button primary">Confirm and commit</button></form>{% endif %}
+</div></div>
+{% if batch.committed_at %}<div class="alert success">Committed {{ batch.rows|length }} rows on {{ batch.committed_at|date:"j M Y, H:i" }}.</div>
+{% else %}
+<p class="alert {% if errors %}error{% else %}success{% endif %}">{% if errors %}{{ errors }} row{{ errors|pluralize }} need correction before you can commit.{% else %}{{ result|length }} rows passed validation.{% endif %}</p>
+<section class="panel"><div class="table-wrap"><table><thead><tr><th>Excel row</th><th>Reference</th><th>Validation result</th></tr></thead><tbody>{% for item in result %}<tr><td>{{ item.number }}</td><td>{{ item.reference }}</td><td>{% if item.error %}<span class="badge orange">Error</span> {{ item.error }}{% else %}<span class="badge green">Ready</span> {{ item.detail }}{% endif %}</td></tr>{% endfor %}</tbody></table></div></section>
+{% endif %}
+{% endblock %}

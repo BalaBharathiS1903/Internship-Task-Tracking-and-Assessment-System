@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Attendance{% endblock %}
+{% block crumb %}Attendance{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>{% if coordinator %}Attendance register{% else %}My attendance{% endif %}</h1><p>{% if coordinator %}Create sessions and record attendance by team.{% else %}See your recorded session marks.{% endif %}</p></div>{% if coordinator %}<div class="actions"><a class="button primary" href="{% url 'setup' 'session' %}">New session</a><a class="button secondary" href="{% url 'new_batch' 'attendance' %}">Import attendance</a></div>{% endif %}</div>
+{% if not coordinator %}<div class="stat-grid"><article class="stat"><p>Attendance rate</p><strong>{% if summary.rate != None %}{{ summary.rate|floatformat:"-1" }}%{% else %}—{% endif %}</strong></article><article class="stat"><p>Present</p><strong>{{ summary.present }}</strong></article><article class="stat"><p>Late</p><strong>{{ summary.late }}</strong></article><article class="stat"><p>Absent</p><strong>{{ summary.absent }}</strong></article></div>{% endif %}
+<section class="panel"><div class="table-wrap"><table>
+<thead><tr><th>Session</th><th>Date</th><th>Team</th><th>Status</th>{% if coordinator %}<th>Action</th>{% endif %}</tr></thead><tbody>
+{% if coordinator %}{% for item in sessions %}<tr><td>{{ item.reference }}</td><td>{{ item.date|date:"j M Y" }}</td><td>{{ item.team }}</td><td><span class="badge muted">{{ item.closed|yesno:"Closed,Open" }}</span></td><td><a class="text-link" href="{% url 'mark_session' item.pk %}">Open register →</a></td></tr>{% empty %}<tr><td colspan="5" class="empty">No attendance sessions yet.</td></tr>{% endfor %}
+{% else %}{% for item in entries %}<tr><td>{{ item.session.reference }}</td><td>{{ item.session.date|date:"j M Y" }}</td><td>{{ item.session.team }}</td><td>{{ item.get_status_display }}</td></tr>{% empty %}<tr><td colspan="4" class="empty">No attendance entries yet.</td></tr>{% endfor %}{% endif %}
+</tbody></table></div></section>
+{% endblock %}

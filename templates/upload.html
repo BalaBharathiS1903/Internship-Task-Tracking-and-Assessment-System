@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Import {{ label }}{% endblock %}
+{% block crumb %}Upload center{% endblock %}
+{% block content %}
+<div class="form-width">
+<a class="text-link back" href="{% url 'imports' %}">← Upload center</a>
+<div class="page-heading"><div><h1>Upload {{ label|lower }}</h1><p>Use the current template and review the validation results before committing.</p></div><a class="button secondary" href="{% url 'template' kind %}">↓ Template</a></div>
+<section class="panel padded"><form method="post" enctype="multipart/form-data" class="stack">{% csrf_token %}
+<label>Completed Excel workbook<input type="file" name="workbook" accept=".xlsx" required><small>Up to 500 rows and 5 MB.</small></label>
+{% if kind == 'submissions' %}<label>Project files<input type="file" name="artifacts" multiple><small>Attach files whose names match the Artifact column. You can also use HTTPS links in the workbook.</small></label>{% endif %}
+<button class="button primary">Validate and preview →</button>
+</form></section>
+</div>
+{% endblock %}

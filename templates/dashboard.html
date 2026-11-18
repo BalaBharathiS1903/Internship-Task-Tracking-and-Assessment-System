@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block crumb %}Overview{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="eyebrow">{{ today|date:"l, j F Y" }}</p>
+    <h1>{% if coordinator %}Internship overview{% else %}My internship{% endif %}</h1>
+    <p>{% if coordinator %}Track assignments, review submissions, and see how each team is progressing.{% else %}See what’s due, submit your work, and check published feedback.{% endif %}</p>
+  </div>
+  <div class="actions">
+    {% if coordinator %}<a class="button white" href="{% url 'new_task' %}">＋ Assign task</a><a class="button ghost" href="{% url 'imports' %}">Upload Excel</a>
+    {% else %}<a class="button white" href="{% url 'tasks' %}">Open my work <span aria-hidden="true">→</span></a><a class="button ghost" href="{% url 'inbox' %}">Inbox{% if unread %} · {{ unread }} new{% endif %}</a>{% endif %}
+  </div>
+</section>
+{% if coordinator %}{% include "filters.html" %}{% endif %}
+{% include "stats.html" %}
+{% if coordinator %}
+<div class="dashboard-grid">
+  <section class="panel">
+    <div class="panel-heading"><div><h2>Team progress</h2><p>Completed assignments by team</p></div><a class="text-link" href="{% url 'reports' %}?{{ request.GET.urlencode }}">View reports →</a></div>
+    <div class="progress-list">
+    {% for team, team_counts in team_totals %}
+      <div class="progress-item"><div><strong>{{ team.name }}</strong><small>{{ team.domain.name }} · {{ team_counts.complete }} / {{ team_counts.total }} complete</small></div><span>{% if team_counts.percent != None %}{{ team_counts.percent|floatformat:"-1" }}%{% else %}—{% endif %}</span><progress value="{{ team_counts.complete }}" max="{{ team_counts.total|default:1 }}" aria-label="{{ team.name }} progress"></progress></div>
+    {% empty %}<div class="empty">Team progress appears after you assign tasks.</div>{% endfor %}
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-heading"><div><h2>Needs attention</h2><p>Overdue work and queued reviews</p></div></div>
+    <div class="attention">
+      <a href="{% url 'assessments' %}?queue=review&amp;{{ request.GET.urlencode }}"><span class="chip blue">☆</span><div><strong>Awaiting assessment</strong><small>Open the assessment queue</small></div><b>{{ counts.in_review }}</b></a>
+      <a href="{% url 'assessments' %}?queue=incomplete&amp;{{ request.GET.urlencode }}"><span class="chip blue">◷</span><div><strong>Incomplete evaluations</strong><small>Submissions still missing scores</small></div><b>{{ counts.incomplete_evaluation }}</b></a>
+      <a href="{% url 'tasks' %}?state=missing_submission&amp;{{ request.GET.urlencode }}"><span class="chip muted">↓</span><div><strong>Missing submissions</strong><small>Assignments awaiting a first submission</small></div><b>{{ counts.missing_submission }}</b></a>
+      {% for item in overdue_items %}
+      <a href="{% url 'task' item.assignment.pk %}"><span class="chip orange">!</span><div><strong>{{ item.assignment.title }}</strong><small>{{ item.assignment.team }} · Due {{ item.deadline|date:"j M" }}</small></div><span aria-hidden="true">→</span></a>
+      {% empty %}<div class="empty">No overdue assignments in this view.</div>{% endfor %}
+    </div>
+  </section>
+</div>
+{% endif %}
+<section class="panel">
+  <div class="panel-heading"><div><h2>{% if coordinator %}Assignment register{% else %}My assignments{% endif %}</h2><p>Ordered by deadline</p></div><a class="text-link" href="{% url 'tasks' %}?{{ request.GET.urlencode }}">View all →</a></div>
+  {% include "task_table.html" %}
+</section>
+{% endblock %}

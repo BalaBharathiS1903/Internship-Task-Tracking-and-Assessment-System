@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block crumb %}Reports{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>Reports</h1><p>Review team completion and export the workbooks for this selection.</p></div><button class="button secondary print-hidden" type="button" onclick="window.print()">Print follow-up report</button></div>
+{% include "filters.html" %}
+{% include "stats.html" %}
+<div class="actions export-actions print-hidden">
+<a class="button secondary" href="{% url 'export' 'follow-up' %}?{{ request.GET.urlencode }}">↓ Follow-up list</a>
+<a class="button secondary" href="{% url 'export' 'tasks' %}?{{ request.GET.urlencode }}">↓ Task register</a>
+<a class="button secondary" href="{% url 'export' 'results' %}?{{ request.GET.urlencode }}">↓ Results</a>
+<a class="button secondary" href="{% url 'export' 'roster' %}?{{ request.GET.urlencode }}">↓ Intern master</a>
+<a class="button secondary" href="{% url 'export' 'attendance' %}?{{ request.GET.urlencode }}">↓ Attendance</a>
+</div>
+<section class="panel"><div class="panel-heading"><h2>Team totals</h2></div><div class="table-wrap"><table><thead><tr><th>Team</th><th>Assignments</th><th>Completed</th><th>Pending</th><th>Overdue</th><th>Completion</th></tr></thead><tbody>
+{% for team, item in team_totals %}<tr><td><strong>{{ team }}</strong><small>{{ team.domain }} · {{ team.cohort }}</small></td><td>{{ item.total }}</td><td>{{ item.complete }}</td><td>{{ item.pending }}</td><td>{{ item.overdue }}</td><td>{% if item.percent != None %}{{ item.percent|floatformat:"-1" }}%{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="6" class="empty">No team totals available for this selection.</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel"><div class="panel-heading"><h2>Pending assignments</h2></div>{% include "task_table.html" %}</section>
+{% endblock %}
