@@ -1,23 +1,47 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Sign in{% endblock %}
+{% block body_class %}login-view{% endblock %}
 {% block content %}
 <div class="login-layout">
   <section class="login-art">
-    <img class="login-brand" src="{% static 'defineinfotech-wordmark.png' %}" width="1555" height="355" alt="DefineInfoTech">
-    <div><h1>Internship Desk</h1><p>Manage assignments, submissions, attendance, and assessment.</p></div>
-    <div class="login-orbit" aria-hidden="true"></div>
+    <div class="login-intro">
+      <img class="login-brand" src="{% static 'defineinfotech-wordmark.png' %}" width="1555" height="355" alt="DefineInfoTech">
+      <h1>Internship Desk</h1>
+      <p>Track assignments, submissions, attendance, and assessment in one place.</p>
+      <ul class="login-features">
+        <li>{% include "icon.html" with name="calendar" only %} See deadlines and overdue work</li>
+        <li>{% include "icon.html" with name="team" only %} Follow progress across your team</li>
+        <li>{% include "icon.html" with name="reports" only %} Download Excel reports</li>
+      </ul>
+    </div>
   </section>
   <section class="login-panel">
-    <h2>Sign in</h2>
-    <p>Use your assigned internship account.</p>
-    <form method="post" class="stack">
-      {% csrf_token %}
-      {{ form.as_p }}
-      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-      <button class="button primary" type="submit">Sign in <span aria-hidden="true">→</span></button>
-    </form>
-    <p class="company-link"><a class="text-link" href="https://defineinfotech.com/">Visit the DefineInfoTech website <span aria-hidden="true">↗</span></a></p>
+    <div class="login-form">
+      <h2>Sign in</h2>
+      <p>Use your assigned internship account.</p>
+      <form method="post" class="stack">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <label for="{{ form.username.id_for_label }}">Username</label>
+        {{ form.username }}
+        {{ form.username.errors }}
+        <label for="{{ form.password.id_for_label }}">Password</label>
+        <div class="password-entry">
+          {{ form.password }}
+          <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false"
+                  aria-controls="{{ form.password.id_for_label }}" hidden>
+            <span class="password-visible-icon">{% include "icon.html" with name="eye" only %}</span>
+            <span class="password-hidden-icon">{% include "icon.html" with name="eye-off" only %}</span>
+          </button>
+        </div>
+        {{ form.password.errors }}
+        {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+        <button class="button primary" type="submit">Sign in</button>
+      </form>
+      <p class="company-link"><a class="text-link" href="https://defineinfotech.com/">Visit the DefineInfoTech website <span aria-hidden="true">↗</span></a></p>
+    </div>
   </section>
 </div>
+<script src="{% static 'password-toggle.js' %}" defer></script>
 {% endblock %}

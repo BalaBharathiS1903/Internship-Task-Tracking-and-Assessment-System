@@ -33,7 +33,7 @@ def describe(assignment, today):
     if assignment.started:
         status = "In progress"
     if current:
-        status = "Awaiting review" if not published else published.get_decision_display()
+        status = published.get_decision_display() if published else "Under review" if evaluation else "Awaiting review"
     if assignment.cancelled:
         status = "Cancelled"
     return {
@@ -70,7 +70,7 @@ def totals(items):
         counts["complete"] += item["complete"]
         counts["pending"] += item["pending"]
         counts["overdue"] += item["overdue"]
-        counts["in_review"] += item["status"] == "Awaiting review"
+        counts["in_review"] += item["status"] in ("Awaiting review", "Under review")
         counts["missing_submission"] += item["missing_submission"]
         counts["incomplete_evaluation"] += item["incomplete_evaluation"]
     counts["percent"] = round(100 * counts["complete"] / counts["total"], 1) if counts["total"] else None

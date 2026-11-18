@@ -12,7 +12,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         if os.environ.get("DJANGO_SQLITE_DEMO") == "1" and os.environ.get("DJANGO_DEMO_PASSWORD"):
-            call_command("seed_demo", stdout=self.stdout)
+            call_command("load_interntrack", stdout=self.stdout)
             return
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")
         if not username:

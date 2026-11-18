@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import FileResponse, Http404
@@ -83,7 +84,7 @@ def registry(request):
 SETUP = {
     "cohort": (m.Cohort, ("name", "code", "id_prefix"), "New cohort", "registry"),
     "domain": (m.Domain, ("name", "code", "cohorts"), "New domain", "registry"),
-    "team": (m.Team, ("name", "code", "cohort", "domain"), "New team", "registry"),
+    "team": (m.Team, ("name", "code", "cohort", "domain", "description"), "New team", "registry"),
     "rubric": (m.Rubric, ("name", "version"), "New rubric version", "registry"),
     "session": (m.AttendanceSession, ("reference", "team", "date"), "New attendance session", "attendance"),
 }
@@ -119,8 +120,10 @@ def roster(request):
     term = request.GET.get("q", "")[:100]
     if term:
         enrollments = enrollments.filter(Q(intern__dit_id__icontains=term) | Q(intern__user__first_name__icontains=term) |
-                                         Q(intern__user__last_name__icontains=term))
-    return render(request, "roster.html", {"enrollments": enrollments})
+                                         Q(intern__user__last_name__icontains=term) |
+                                         Q(intern__user__email__icontains=term) | Q(intern__college__icontains=term))
+    page = Paginator(enrollments, 20).get_page(request.GET.get("page"))
+    return render(request, "roster.html", {"enrollments": page, "page": page})
 
 
 @coordinator_required
@@ -203,7 +206,8 @@ def tasks(request):
     state = request.GET.get("state")
     if state in ("pending", "overdue", "complete", "missing_submission"):
         items = [item for item in items if item[state]]
-    return render(request, "tasks.html", {"items": items, **(filters() if is_coordinator(request.user) else {})})
+    page = Paginator(items, 20).get_page(request.GET.get("page"))
+    return render(request, "tasks.html", {"items": page, "page": page, **(filters() if is_coordinator(request.user) else {})})
 
 
 def task_for(user, pk):
@@ -317,10 +321,11 @@ def assessments(request):
     if not is_coordinator(request.user):
         items = [item for item in items if item["published"]]
     elif request.GET.get("queue") == "review":
-        items = [item for item in items if item["status"] == "Awaiting review"]
+        items = [item for item in items if item["status"] in ("Awaiting review", "Under review")]
     elif request.GET.get("queue") == "incomplete":
         items = [item for item in items if item["incomplete_evaluation"]]
-    return render(request, "assessments.html", {"items": items})
+    page = Paginator(items, 20).get_page(request.GET.get("page"))
+    return render(request, "assessments.html", {"items": page, "page": page})
 
 
 @coordinator_required
@@ -347,7 +352,8 @@ def evaluate(request, pk):
             form_error(form, exc)
     return render_form(request, form, "Review submission", reverse("assessments"), "Save assessment",
                        description=f"{submission.assignment} · Submission {submission.version}",
-                       evidence=submission, total=evaluation.total if evaluation else None)
+                       evidence=submission, total=evaluation.total if evaluation else None,
+                       imported_notes=evaluation.imported_notes if evaluation else "")
 
 
 @coordinator_required
@@ -571,8 +577,9 @@ def export(request, kind):
             value = request.GET.get(key, "")
             if value.isdecimal() and len(value) < 16:
                 records = records.filter(**{f"{key}_id": int(value)})
-        w.add_rows(sheet, [("DIT ID", "Name", "Email", "Cohort", "Domain", "Team")])
-        w.add_rows(sheet, [(item.intern.dit_id, item.intern.user.get_full_name(), item.intern.user.email,
+        w.add_rows(sheet, [("DIT ID", "Name", "Email", "Phone", "College", "Placement role", "Joined", "Cohort", "Domain", "Team")])
+        w.add_rows(sheet, [(item.intern.dit_id, item.intern.user.get_full_name(), item.intern.user.email, item.intern.phone,
+                            item.intern.college, item.intern.placement_role, item.intern.joined_on,
                             item.cohort.name, item.domain.name, item.team.name if item.team else "") for item in records])
     elif kind == "attendance":
         entries = m.Attendance.objects.select_related("session__team__domain", "enrollment__intern")

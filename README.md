@@ -9,11 +9,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe manage.py migrate
 $env:DJANGO_DEMO_PASSWORD = Read-Host "Shared demo password" -MaskInput
-.\.venv\Scripts\python.exe manage.py seed_demo
+.\.venv\Scripts\python.exe manage.py load_interntrack
 .\.venv\Scripts\python.exe manage.py runserver
 ```
 
-Open [Internship Desk](http://127.0.0.1:8000/). The local demo uses SQLite and synthetic records. All three demo accounts use the password supplied through `DJANGO_DEMO_PASSWORD`.
+Open [Internship Desk](http://127.0.0.1:8000/). Run `load_interntrack` on a freshly migrated SQLite database. It imports the supplied InternTrack synthetic package, which contains 500 interns, 10 teams, 500 assignments, and 200 assessments. All three demo accounts use the password supplied through `DJANGO_DEMO_PASSWORD`.
 
 | Username | Workspace |
 |---|---|
@@ -35,7 +35,7 @@ Every workbook includes an example and version metadata. Fill its Data sheet and
 
 ## Render demo
 
-The Blueprint in `render.yaml` runs one free web service in Singapore with SQLite. It seeds synthetic records and the three demo logins using `DJANGO_DEMO_PASSWORD` from its Render Environment page.
+The Blueprint in `render.yaml` runs one free web service in Singapore with SQLite. It imports the bundled synthetic InternTrack package into an empty database and configures the three demo logins with `DJANGO_DEMO_PASSWORD` from its Render Environment page. The source package provides historical overall scores and remarks. Approved and rejected scores are preserved as published decisions, and Under Review records remain drafts. The source does not include attendance, uploaded files, or revision deadlines.
 
 Free Render services use an ephemeral filesystem. Database records and uploaded files reset on restart, redeploy, or idle spin-down. Use synthetic records for the hosted demo.
 

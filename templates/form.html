@@ -9,7 +9,7 @@
     {% if evidence.link %}<a class="button secondary" href="{{ evidence.link }}" rel="noreferrer" target="_blank">Open project link ↗</a>{% endif %}
     {% if evidence.artifact %}<a class="button secondary" href="{% url 'artifact' evidence.pk %}">Download file</a>{% endif %}
     {% if total != None %}<span class="badge teal">Draft total {{ total }} / 100</span>{% endif %}
-  </div></section>{% endif %}
+  </div>{% if imported_notes %}<h3>Imported assessment notes</h3><p>{{ imported_notes|linebreaksbr }}</p>{% endif %}</section>{% endif %}
   <section class="panel padded">
     <form class="stack" method="post" enctype="multipart/form-data">
       {% csrf_token %}

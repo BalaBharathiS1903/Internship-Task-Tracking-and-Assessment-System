@@ -34,6 +34,7 @@ class Team(models.Model):
     domain = models.ForeignKey(Domain, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=24, validators=[code_validator])
+    description = models.TextField(blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["cohort", "code"], name="unique_team_code")]
@@ -51,6 +52,10 @@ class Intern(models.Model):
     reference = models.CharField(max_length=40, unique=True, validators=[code_validator])
     dit_id = models.CharField(max_length=40, validators=[code_validator])
     dit_key = models.CharField(max_length=40, unique=True, editable=False)
+    phone = models.CharField(max_length=32, blank=True)
+    college = models.CharField(max_length=160, blank=True)
+    placement_role = models.CharField(max_length=100, blank=True)
+    joined_on = models.DateField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         self.dit_id = self.dit_id.strip()
@@ -190,6 +195,8 @@ class Evaluation(models.Model):
     decision = models.CharField(max_length=12, choices=Decision.choices, blank=True)
     total = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    imported_notes = models.TextField(blank=True)
 
 
 class Score(models.Model):

@@ -218,6 +218,7 @@ def assess(actor, submission, entries, *, decision="", revision_due=None):
         save_checked(score)
     evaluation.total = weighted_score(list(criteria.values()), dict(evaluation.scores.values_list("criterion_id", "value")))
     evaluation.coordinator = actor
+    evaluation.reviewed_at = timezone.now()
     if decision:
         if decision not in m.Evaluation.Decision.values or evaluation.total is None:
             raise ValidationError("Enter every required score before publishing a valid decision.")

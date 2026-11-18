@@ -65,7 +65,8 @@ if os.environ.get("POSTGRES_DB"):
         }
     }
 elif DEBUG or os.environ.get("DJANGO_SQLITE_DEMO") == "1":
-    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3",
+    DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3",
+                            "NAME": os.environ.get("DJANGO_SQLITE_PATH") or BASE_DIR / "db.sqlite3",
                             "OPTIONS": {"timeout": 20}}}
 else:
     raise ImproperlyConfigured("Set POSTGRES_DB for production or enable DJANGO_SQLITE_DEMO for a temporary demo.")

@@ -7,5 +7,5 @@
 </div>
 {% if coordinator %}{% include "filters.html" %}{% endif %}
 <div class="tabs"><a href="{% querystring state=None %}" {% if not request.GET.state %}aria-current="page"{% endif %}>All</a><a href="{% querystring state='pending' %}" {% if request.GET.state == 'pending' %}aria-current="page"{% endif %}>Pending</a><a href="{% querystring state='overdue' %}" {% if request.GET.state == 'overdue' %}aria-current="page"{% endif %}>Overdue</a><a href="{% querystring state='missing_submission' %}" {% if request.GET.state == 'missing_submission' %}aria-current="page"{% endif %}>Missing submission</a><a href="{% querystring state='complete' %}" {% if request.GET.state == 'complete' %}aria-current="page"{% endif %}>Completed</a></div>
-<section class="panel">{% include "task_table.html" %}</section>
+<section class="panel">{% include "task_table.html" %}{% include "pagination.html" %}</section>
 {% endblock %}
