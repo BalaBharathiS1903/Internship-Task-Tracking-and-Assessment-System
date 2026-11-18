@@ -26,7 +26,7 @@ SCHEMAS = {
     "tasks": ("Task register", ("reference", "task_code", "title", "dit_id", "cohort", "team", "rubric", "assigned_date", "due_date", "instructions")),
     "submissions": ("Submission manifest", ("assignment", "artifact", "link", "note")),
     "attendance": ("Attendance register", ("session", "dit_id", "status", "reason")),
-    "criteria": ("Rubric criteria", ("rubric", "code", "name", "description", "weight", "minimum", "maximum", "step")),
+    "criteria": ("Scoring items", ("rubric", "code", "name", "description", "weight", "minimum", "maximum", "step")),
     "scores": ("Score register", ("assignment", "version", "criterion", "score", "comment", "feedback")),
 }
 EXAMPLES = {
@@ -96,6 +96,9 @@ def template(kind, user):
         info.append(("Artifact", "Enter the exact filename of an attached file, or use an HTTPS link. Remove unused rows."))
         eligible = [item for item in rows(own_assignments(user, m.Assignment.objects.all())) if item["can_submit"]]
         add_rows(sheet, [(item["assignment"].reference, "", "", "") for item in eligible[:MAX_ROWS]])
+    if kind == "criteria":
+        info.append(("Share of final score", "Use weight for how much the item counts. Add all shares to 100% before publishing."))
+        info.append(("Allowed scores", "Use minimum and maximum for the lowest and highest scores. Use step for the amount between scores."))
     if kind == "roster":
         info.append(("Required fields", "Enter intern reference, name, college, internship batch, and domain. Enter an official DIT ID when local issuance is disabled."))
         info.append(("Team allocation", "Enter a domain code or name. The import assigns an available team in that batch and domain, creating the first team if needed."))
@@ -153,7 +156,10 @@ def parse(upload, kind, *, include_setup=False):
         try:
             headers = SCHEMAS[kind][1]
             metadata = book["Instructions"]
-            if str(metadata["B2"].value) != template_version(kind) or str(metadata["B1"].value).strip().casefold() != SCHEMAS[kind][0].casefold():
+            accepted_labels = {SCHEMAS[kind][0].casefold()}
+            if kind == "criteria":
+                accepted_labels.add("rubric criteria")
+            if str(metadata["B2"].value) != template_version(kind) or str(metadata["B1"].value).strip().casefold() not in accepted_labels:
                 raise ValidationError("Download the current template for this workflow.")
             data = book["Data"]
             data.reset_dimensions()

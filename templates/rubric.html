@@ -3,6 +3,26 @@
 {% block crumb %}Scoring guide{% endblock %}
 {% block content %}
 <a class="text-link back" href="{% url 'registry' %}">← Program setup</a>
-<div class="page-heading"><div><h1>{{ rubric }}</h1><p>{{ rubric.published|yesno:"Published scoring guide,Draft scoring guide" }} · Criterion weights must total 100%.</p></div>{% if not rubric.published %}<div class="actions"><a class="button secondary" href="{% url 'criterion' rubric.pk %}">Add criterion</a><a class="button secondary" href="{% url 'new_batch' 'criteria' %}">Import criteria</a><form method="post" action="{% url 'publish_rubric' rubric.pk %}">{% csrf_token %}<button class="button primary">Publish scoring guide</button></form></div>{% endif %}</div>
-<section class="panel"><div class="table-wrap"><table><thead><tr><th>Criterion</th><th>Weight</th><th>Scale</th><th>Increment</th></tr></thead><tbody>{% for item in criteria %}<tr><td><strong>{{ item.name }}</strong><small>{{ item.code }} · {{ item.description }}</small></td><td>{{ item.weight }}%</td><td>{{ item.minimum }}–{{ item.maximum }}</td><td>{{ item.step }}</td></tr>{% empty %}<tr><td colspan="4" class="empty">Add criteria before publishing.</td></tr>{% endfor %}</tbody></table></div></section>
+<div class="page-heading">
+  <div><h1>{{ rubric }}</h1><p>{{ rubric.published|yesno:"Published scoring guide,Draft scoring guide" }}</p></div>
+  {% if not rubric.published %}
+  <div class="actions"><a class="button secondary" href="{% url 'criterion' rubric.pk %}">Add scoring item</a><a class="button secondary" href="{% url 'new_batch' 'criteria' %}">Import scoring items</a><form method="post" action="{% url 'publish_rubric' rubric.pk %}">{% csrf_token %}<button class="button primary">Publish scoring guide</button></form></div>
+  {% endif %}
+</div>
+<section class="panel">
+  <div class="panel-heading"><div><h2>Scoring items</h2>
+    {% if not rubric.published %}<p><strong>{{ share_total|floatformat:"-2" }}% assigned.</strong>
+      {% if share_remaining %}Assign {{ share_remaining|floatformat:"-2" }}% more to reach 100% before publishing.
+      {% elif share_over %}Reduce the total by {{ share_over|floatformat:"-2" }}% to reach 100% before publishing.
+      {% else %}The shares add up to 100%.{% endif %}
+    </p>{% endif %}
+  </div></div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>What to assess</th><th>Share of final score</th><th>Allowed score range</th><th>Score increases by</th></tr></thead>
+    <tbody>{% for item in criteria %}
+      <tr><td><strong>{{ item.name }}</strong><small>Code {{ item.code }}{% if item.description %} · {{ item.description }}{% endif %}</small></td>
+      <td>{{ item.weight|floatformat:"-2" }}%</td><td>{{ item.minimum|floatformat:"-2" }} to {{ item.maximum|floatformat:"-2" }}</td><td>{{ item.step|floatformat:"-2" }}</td></tr>
+    {% empty %}<tr><td colspan="4" class="empty">Add what you want to assess before publishing.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
 {% endblock %}

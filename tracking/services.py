@@ -211,7 +211,7 @@ def publish_rubric(actor, rubric):
     rubric = m.Rubric.objects.select_for_update().get(pk=rubric.pk)
     criteria = list(rubric.criteria.all())
     if sum(item.weight for item in criteria) != Decimal("100"):
-        raise ValidationError("Criterion weights must total exactly 100%.")
+        raise ValidationError("The shares of the final score must add up to 100% before publishing.")
     for item in criteria:
         item.full_clean()
     rubric.published = True
@@ -224,7 +224,7 @@ def add_criterion(actor, rubric, **values):
     allow_coordinator(actor)
     rubric = m.Rubric.objects.select_for_update().get(pk=rubric.pk)
     if rubric.published:
-        raise ValidationError("Create a new scoring guide version to change published criteria.")
+        raise ValidationError("Create a new scoring guide version to change published scoring items.")
     return save_checked(m.Criterion(rubric=rubric, **values))
 
 
@@ -248,10 +248,10 @@ def assess(actor, submission, entries, *, decision="", revision_due=None):
     for criterion_id, values in entries.items():
         criterion = criteria.get(criterion_id)
         if criterion is None:
-            raise ValidationError("The criterion is outside this submission's scoring guide.")
+            raise ValidationError("Choose a scoring item from this submission's scoring guide.")
         value, comment, feedback = values
         if value < criterion.minimum or value > criterion.maximum or (value - criterion.minimum) % criterion.step:
-            raise ValidationError(f"{criterion.name}: use {criterion.minimum}–{criterion.maximum} in increments of {criterion.step}.")
+            raise ValidationError(f"{criterion.name}. {criterion.score_help}")
         fraction = (value - criterion.minimum) / (criterion.maximum - criterion.minimum)
         band = "Meets most criteria" if fraction >= Decimal("0.75") else "Review the criterion and identify improvements"
         draft = f"{criterion.name} — {band}. {criterion.description} {comment}".strip()

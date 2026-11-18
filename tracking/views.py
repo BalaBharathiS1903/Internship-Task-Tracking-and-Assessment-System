@@ -371,22 +371,24 @@ def evaluate(request, pk):
 @coordinator_required
 def rubric(request, pk):
     item = get_object_or_404(m.Rubric, pk=pk)
-    return render(request, "rubric.html", {"rubric": item, "criteria": item.criteria.all()})
+    criteria = list(item.criteria.all())
+    total = sum(criterion.weight for criterion in criteria)
+    return render(request, "rubric.html", {"rubric": item, "criteria": criteria, "share_total": total,
+                                          "share_remaining": max(100 - total, 0), "share_over": max(total - 100, 0)})
 
 
 @coordinator_required
 def criterion(request, pk):
     item = get_object_or_404(m.Rubric, pk=pk)
-    factory = f.model_form(m.Criterion, ("code", "name", "description", "weight", "minimum", "maximum", "step"))
-    form = factory(request.POST or None)
+    form = f.ScoringItemForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         try:
             s.add_criterion(request.user, item, **form.cleaned_data)
-            messages.success(request, "Criterion added.")
+            messages.success(request, "Scoring item added.")
             return redirect("rubric", pk=pk)
         except (ValidationError, IntegrityError) as exc:
             form_error(form, exc)
-    return render_form(request, form, "Add scoring criterion", reverse("rubric", args=[pk]))
+    return render_form(request, form, "Add scoring item", reverse("rubric", args=[pk]), "Add scoring item")
 
 
 @coordinator_required

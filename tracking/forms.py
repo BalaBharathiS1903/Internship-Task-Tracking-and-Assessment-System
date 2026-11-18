@@ -52,7 +52,8 @@ class AssignmentForm(forms.Form):
     enrollment = forms.ModelChoiceField(
         label="Intern and internship batch", queryset=m.Enrollment.objects.filter(team__isnull=False).select_related("intern__user", "cohort"),
     )
-    rubric = forms.ModelChoiceField(label="Scoring guide", queryset=m.Rubric.objects.filter(published=True))
+    rubric = forms.ModelChoiceField(label="Scoring guide", queryset=m.Rubric.objects.filter(published=True),
+                                   help_text="Choose a published guide with the rules for scoring this assignment.")
     assigned_date = forms.DateField(widget=DateInput())
     due_date = forms.DateField(widget=DateInput())
     instructions = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), required=False)
@@ -71,6 +72,20 @@ class OfflineSubmissionForm(SubmissionForm):
     reason = forms.CharField(max_length=200, label="Reason for recording offline")
 
 
+class ScoringItemForm(forms.ModelForm):
+    class Meta:
+        model = m.Criterion
+        fields = ("code", "name", "description", "weight", "minimum", "maximum", "step")
+        labels = {"code": "Item code", "name": "What to assess", "description": "What to look for",
+                  "weight": "Share of final score (%)", "minimum": "Lowest allowed score",
+                  "maximum": "Highest allowed score", "step": "Score increases by"}
+        help_texts = {
+            "code": "Use a short identifier such as QUALITY.",
+            "weight": "Enter 60 if this item should count for 60 points out of 100.",
+            "step": "For a range of 0 to 10, enter 2 to allow 0, 2, 4, 6, 8, and 10.",
+        }
+
+
 class EvaluationForm(forms.Form):
     decision = forms.ChoiceField(
         required=False, choices=[("", "Save draft"), *m.Evaluation.Decision.choices],
@@ -82,10 +97,11 @@ class EvaluationForm(forms.Form):
         for item in criteria:
             saved = scores.get(item.pk)
             self.fields[f"score_{item.pk}"] = forms.DecimalField(
-                required=False, max_digits=8, decimal_places=2, label=f"{item.name} · {item.weight}%",
+                required=False, max_digits=8, decimal_places=2,
+                label=f"{item.name} · {item.weight.normalize():f}% of final score",
                 initial=saved.value if saved else None,
                 min_value=item.minimum, max_value=item.maximum,
-                help_text=f"{item.minimum}–{item.maximum}, increments of {item.step}. {item.description}",
+                help_text=f"{item.score_help} {item.description}".strip(),
             )
             self.fields[f"comment_{item.pk}"] = forms.CharField(
                 required=False, max_length=2000, label=f"{item.name} · Coordinator notes",

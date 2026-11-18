@@ -83,6 +83,31 @@ class Workflows(TestCase):
             with self.subTest(route=route):
                 self.assertEqual(self.client.get(reverse(route, args=args)).status_code, 200)
 
+    def test_scoring_guide_explains_the_score_range_and_remaining_share(self):
+        self.client.force_login(self.coordinator)
+        guide = m.Rubric.objects.create(name="Project assessment", version=1)
+        item = s.add_criterion(self.coordinator, guide, code="QUALITY", name="Implementation quality",
+                               weight=Decimal("82"), minimum=Decimal("172"), maximum=Decimal("182"), step=Decimal("2"))
+        page = self.client.get(reverse("rubric", args=[guide.pk]))
+        for text in ("What to assess", "Share of final score", "Allowed score range", "Score increases by",
+                     "82% assigned", "Assign 18% more", "172 to 182"):
+            self.assertContains(page, text)
+        form = self.client.get(reverse("criterion", args=[guide.pk]))
+        self.assertContains(form, "Lowest allowed score")
+        self.assertContains(form, "Highest allowed score")
+        self.assertEqual(s.weighted_score([item], {item.pk: Decimal("178")}), Decimal("49.20"))
+        with self.assertRaisesMessage(ValidationError, "must add up to 100%"):
+            s.publish_rubric(self.coordinator, guide)
+        workbook = self.download("template", "criteria")
+        self.assertEqual(workbook["Instructions"]["B1"].value, "Scoring items")
+        workbook["Instructions"]["B1"] = "Rubric criteria"
+        workbook["Data"].append((str(guide), "DOCS", "Documentation", "", "18", "0", "10", "1"))
+        batch, preview = self.upload_batch("criteria", workbook)
+        self.assertContains(preview, "1 rows passed validation.")
+        self.assertEqual(self.client.post(batch).status_code, 302)
+        page = self.client.get(reverse("rubric", args=[guide.pk]))
+        self.assertContains(page, "The shares add up to 100%.")
+
     def test_directory_filters_and_reports(self):
         self.client.force_login(self.coordinator)
         m.Intern.objects.filter(pk=self.member.intern_id).update(college="Campus One")

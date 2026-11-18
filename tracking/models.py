@@ -131,7 +131,12 @@ class Criterion(models.Model):
     def clean(self):
         if self.minimum is not None and self.maximum is not None and self.step is not None and self.step > 0:
             if (self.maximum - self.minimum) % self.step:
-                raise ValidationError({"step": "The increment must divide the score range."})
+                raise ValidationError({"step": "Choose a step that lands exactly on the highest allowed score."})
+
+    @property
+    def score_help(self):
+        lowest, highest, step = (format(value.normalize(), "f") for value in (self.minimum, self.maximum, self.step))
+        return f"Enter a score from {lowest} to {highest}, going up by {step} from {lowest}."
 
     def __str__(self):
         return self.name
