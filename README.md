@@ -28,6 +28,8 @@ Every workbook includes an example and version metadata. Fill its Data sheet and
 
 The Blueprint in `render.yaml` runs one free web service in Singapore with SQLite. The database starts empty, with the `DITcoordinator` account provisioned from the `DJANGO_COORDINATOR_PASSWORD` environment variable.
 
+To provision a Django admin account on Render, configure `DJANGO_SUPERUSER_USERNAME` and `DJANGO_SUPERUSER_PASSWORD` in the service environment. Startup creates the account once per database. Django admin is at `/admin/`.
+
 Free Render services use an ephemeral filesystem. Database records and uploaded files reset on restart, redeploy, or idle spin-down. Use synthetic records for the hosted demo.
 
 ## PostgreSQL configuration
