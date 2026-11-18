@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 from decimal import Decimal
 
@@ -10,23 +11,48 @@ from django.utils import timezone
 
 from tracking import models as m, services as s
 
-DEMO_PASSWORD = "DeskDemo-2026!"
+COORDINATOR = "DITcoordinator"
+TEAM_LEAD = "DITteamlead"
+INTERN = "DITintern"
+
+
+def set_demo_login(user, username, password):
+    if user.username != username:
+        if get_user_model().objects.filter(username__iexact=username).exclude(pk=user.pk).exists():
+            raise CommandError(f"The demo username {username} is already in use.")
+        user.username = username
+    user.set_password(password)
+    user.save(update_fields=["username", "password"])
 
 
 class Command(BaseCommand):
-    help = "Create synthetic sample records and local demo accounts."
+    help = "Create synthetic sample records and configure demo account logins."
 
     @transaction.atomic
     def handle(self, *args, **options):
-        if not settings.DEBUG or connection.vendor != "sqlite":
-            raise CommandError("Demo seed is restricted to local SQLite development.")
-        if m.Cohort.objects.filter(code="DEMO-26").exists():
-            self.stdout.write("Demo cohort already exists.")
-            return
+        hosted_demo = os.environ.get("DJANGO_SQLITE_DEMO") == "1"
+        if connection.vendor != "sqlite" or not (settings.DEBUG or hosted_demo):
+            raise CommandError("Demo seed is restricted to SQLite demo environments.")
+        password = os.environ.get("DJANGO_DEMO_PASSWORD", "")
+        if len(password) < 8:
+            raise CommandError("Set DJANGO_DEMO_PASSWORD before seeding the demo.")
         User = get_user_model()
-        if User.objects.filter(username__in=["demo-coordinator", "intern-demo-meera", "intern-demo-arjun"]).exists():
+        if m.Cohort.objects.filter(code="DEMO-26").exists():
+            coordinator = User.objects.filter(username=COORDINATOR, groups__name="Coordinators").first()
+            if not coordinator:
+                coordinator = User.objects.filter(username="demo-coordinator", groups__name="Coordinators").first()
+            lead = User.objects.filter(intern__reference="DEMO-MEERA", intern__enrollments__cohort__code="DEMO-26").first()
+            intern = User.objects.filter(intern__reference="DEMO-ARJUN", intern__enrollments__cohort__code="DEMO-26").first()
+            if not all((coordinator, lead, intern)):
+                raise CommandError("Could not identify all three existing demo accounts.")
+            for user, username in ((coordinator, COORDINATOR), (lead, TEAM_LEAD), (intern, INTERN)):
+                if user.username != username or not user.check_password(password):
+                    set_demo_login(user, username, password)
+            self.stdout.write("Existing demo records retained and demo logins configured.")
+            return
+        if User.objects.filter(username__in=[COORDINATOR, TEAM_LEAD, INTERN]).exists():
             raise CommandError("A demo username already exists.")
-        coordinator = User.objects.create_user("demo-coordinator", password=DEMO_PASSWORD, first_name="Ananya", last_name="Rao")
+        coordinator = User.objects.create_user(COORDINATOR, password=password, first_name="Ananya", last_name="Rao")
         group, _ = Group.objects.get_or_create(name="Coordinators")
         coordinator.groups.add(group)
         cohort = s.save_checked(m.Cohort(code="DEMO-26", name="Demo Internship · 2026", id_prefix="DIT-DEMO-"))
@@ -64,9 +90,10 @@ class Command(BaseCommand):
                 domain=team.domain, email=f"{code.lower()}@example.invalid",
             )
             user = enrollment.intern.user
-            if index < 2:
-                user.set_password(DEMO_PASSWORD)
-                user.save(update_fields=["password"])
+            if index == 0:
+                set_demo_login(user, TEAM_LEAD, password)
+            elif index == 1:
+                set_demo_login(user, INTERN, password)
             if index == 0:
                 s.update_enrollment(coordinator, enrollment, name=name, email=user.email,
                                     team=team, domain=team.domain, is_lead=True, reason="Synthetic roster")

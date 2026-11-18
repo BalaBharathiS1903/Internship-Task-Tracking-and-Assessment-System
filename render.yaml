@@ -13,9 +13,7 @@ services:
         value: "0"
       - key: DJANGO_SECRET_KEY
         generateValue: true
-      - key: DJANGO_SUPERUSER_USERNAME
-        value: coordinator
-      - key: DJANGO_SUPERUSER_PASSWORD
-        generateValue: true
+      - key: DJANGO_DEMO_PASSWORD
+        sync: false
       - key: DJANGO_SQLITE_DEMO
         value: "1"

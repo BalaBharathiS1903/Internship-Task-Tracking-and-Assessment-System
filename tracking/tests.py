@@ -2,6 +2,7 @@ from datetime import timedelta
 from decimal import Decimal
 from io import BytesIO, StringIO
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -19,17 +20,36 @@ from . import models as m, reporting as r, services as s
 class Workflows(TestCase):
     @classmethod
     def setUpTestData(cls):
-        with override_settings(DEBUG=True):
+        with override_settings(DEBUG=True), patch.dict("os.environ", {"DJANGO_DEMO_PASSWORD": "Demo-test-only-2026"}):
             call_command("seed_demo", stdout=StringIO())
         users = get_user_model().objects
-        cls.coordinator = users.get(username="demo-coordinator")
-        cls.lead = users.get(username="intern-demo-meera")
-        cls.intern = users.get(username="intern-demo-arjun")
+        cls.coordinator = users.get(username="DITcoordinator")
+        cls.lead = users.get(username="DITteamlead")
+        cls.intern = users.get(username="DITintern")
         cls.member = cls.intern.intern.enrollments.get()
         cls.outside = m.Enrollment.objects.get(intern__reference="DEMO-NAVEEN")
         cls.assignment = m.Assignment.objects.get(reference="DEMO-ARJUN-1")
         cls.rubric = cls.assignment.rubric
         cls.criteria = list(cls.rubric.criteria.order_by("-weight"))
+
+    def test_demo_logins_share_password_and_keep_role_permissions(self):
+        for user in (self.coordinator, self.lead, self.intern):
+            self.assertTrue(self.client.login(username=user.username, password="Demo-test-only-2026"))
+            self.client.logout()
+        self.assertFalse(self.coordinator.is_superuser)
+
+    def test_existing_local_demo_accounts_are_updated_without_resetting_records(self):
+        legacy = {self.coordinator.pk: "demo-coordinator", self.lead.pk: "intern-demo-meera",
+                  self.intern.pk: "intern-demo-arjun"}
+        for pk, username in legacy.items():
+            get_user_model().objects.filter(pk=pk).update(username=username)
+        with override_settings(DEBUG=True), patch.dict("os.environ", {"DJANGO_DEMO_PASSWORD": "Updated-test-password"}):
+            call_command("seed_demo", stdout=StringIO())
+        for user in (self.coordinator, self.lead, self.intern):
+            updated = get_user_model().objects.get(pk=user.pk)
+            self.assertEqual(updated.username, user.username)
+            self.assertTrue(updated.check_password("Updated-test-password"))
+        self.assertTrue(m.Assignment.objects.filter(pk=self.assignment.pk).exists())
 
     def download(self, route, *args, query=None):
         response = self.client.get(reverse(route, args=args), query or {})

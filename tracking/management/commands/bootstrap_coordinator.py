@@ -1,15 +1,19 @@
 import os
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 
 class Command(BaseCommand):
-    help = "Create the initial coordinator once using credentials supplied by the host."
+    help = "Initialize the hosted demo or create the first production coordinator."
 
     @transaction.atomic
     def handle(self, *args, **options):
+        if os.environ.get("DJANGO_SQLITE_DEMO") == "1" and os.environ.get("DJANGO_DEMO_PASSWORD"):
+            call_command("seed_demo", stdout=self.stdout)
+            return
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")
         if not username:
             return

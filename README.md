@@ -8,17 +8,18 @@ Internship Desk is a Django workspace for intern onboarding, task tracking, atte
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe manage.py migrate
+$env:DJANGO_DEMO_PASSWORD = Read-Host "Shared demo password" -MaskInput
 .\.venv\Scripts\python.exe manage.py seed_demo
 .\.venv\Scripts\python.exe manage.py runserver
 ```
 
-Open [Internship Desk](http://127.0.0.1:8000/). The local demo uses SQLite and synthetic records. Use the password `DeskDemo-2026!` with one of these demo accounts.
+Open [Internship Desk](http://127.0.0.1:8000/). The local demo uses SQLite and synthetic records. All three demo accounts use the password supplied through `DJANGO_DEMO_PASSWORD`.
 
 | Username | Workspace |
 |---|---|
-| `demo-coordinator` | Coordinator |
-| `intern-demo-meera` | Intern and Team Lead |
-| `intern-demo-arjun` | Intern |
+| `DITcoordinator` | Coordinator |
+| `DITteamlead` | Intern and Team Lead |
+| `DITintern` | Intern |
 
 For an empty database, skip the demo command and use `python manage.py createsuperuser` after migrating. Sign in as that user to set up a cohort, its enabled domains, teams, and a rubric. Register an intern, then use the private activation link from their record. A superuser can add coordinator accounts to the `Coordinators` group in Django administration. The coordinator group grants access across the workspace.
 
@@ -34,7 +35,7 @@ Every workbook includes an example and version metadata. Fill its Data sheet and
 
 ## Render demo
 
-The Blueprint in `render.yaml` runs one free web service in Singapore with SQLite. The service starts with an empty database and creates the `coordinator` login using the generated `DJANGO_SUPERUSER_PASSWORD` on its Render Environment page. The local demo accounts are available through the local seed command only.
+The Blueprint in `render.yaml` runs one free web service in Singapore with SQLite. It seeds synthetic records and the three demo logins using `DJANGO_DEMO_PASSWORD` from its Render Environment page.
 
 Free Render services use an ephemeral filesystem. Database records and uploaded files reset on restart, redeploy, or idle spin-down. Use synthetic records for the hosted demo.
 
