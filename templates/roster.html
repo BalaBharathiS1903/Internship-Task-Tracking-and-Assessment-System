@@ -3,7 +3,14 @@
 {% block crumb %}Intern master{% endblock %}
 {% block content %}
 <div class="page-heading"><div><h1>Intern master</h1><p>Manage official DIT IDs, domains, team memberships, and account activation.</p></div><div class="actions"><a class="button primary" href="{% url 'new_intern' %}">＋ Register intern</a><a class="button secondary" href="{% url 'new_batch' 'roster' %}">Import roster</a></div></div>
-<form class="filters" method="get"><label>Find intern<input type="search" placeholder="Name, DIT ID, or college" name="q" value="{{ request.GET.q }}"></label><button class="button secondary">Search</button></form>
+<form class="panel filter-panel" method="get" aria-label="Intern filters">
+  <div class="filter-row roster-filters">
+    <label>Search by name, DIT ID, or email<input type="search" placeholder="e.g. DIT2026004 or Priya" name="q" value="{{ request.GET.q }}"></label>
+    <label>College<select name="college"><option value="">All colleges</option>{% for college in colleges %}<option {% if request.GET.college == college %}selected{% endif %}>{{ college }}</option>{% endfor %}</select></label>
+    <label>Team<select name="team"><option value="">All teams</option>{% for team in teams %}<option value="{{ team.pk }}" {% if request.GET.team == team.pk|stringformat:"s" %}selected{% endif %}>{{ team }}</option>{% endfor %}</select></label>
+    <div class="filter-actions"><button class="button primary">{% include "icon.html" with name="search" only %} Filter</button><a class="button secondary icon-button" href="{% url 'roster' %}" aria-label="Clear intern filters" title="Clear filters">{% include "icon.html" with name="close" only %}</a></div>
+  </div>
+</form>
 <section class="panel"><div class="table-wrap"><table>
 <thead><tr><th>Intern</th><th>DIT ID</th><th>College</th><th>Team</th><th>Placement role</th><th>Joined</th><th>Account</th><th>Action</th></tr></thead>
 <tbody>{% for row in enrollments %}<tr>

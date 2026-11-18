@@ -8,25 +8,16 @@ Internship Desk is a Django workspace for intern onboarding, task tracking, atte
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe manage.py migrate
-$env:DJANGO_DEMO_PASSWORD = Read-Host "Shared demo password" -MaskInput
-.\.venv\Scripts\python.exe manage.py load_interntrack
+.\.venv\Scripts\python.exe manage.py createsuperuser
 .\.venv\Scripts\python.exe manage.py runserver
 ```
 
-Open [Internship Desk](http://127.0.0.1:8000/). Run `load_interntrack` on a freshly migrated SQLite database. It imports the supplied InternTrack synthetic package, which contains 500 interns, 10 teams, 500 assignments, and 200 assessments. All three demo accounts use the password supplied through `DJANGO_DEMO_PASSWORD`.
-
-| Username | Workspace |
-|---|---|
-| `DITcoordinator` | Coordinator |
-| `DITteamlead` | Intern and Team Lead |
-| `DITintern` | Intern |
-
-For an empty database, skip the demo command and use `python manage.py createsuperuser` after migrating. Sign in as that user to set up a cohort, its enabled domains, teams, and a rubric. Register an intern, then use the private activation link from their record. A superuser can add coordinator accounts to the `Coordinators` group in Django administration. The coordinator group grants access across the workspace.
+Open [Internship Desk](http://127.0.0.1:8000/) and sign in to set up internship batches, domains, teams, and scoring guides. Register each intern, then share the private activation link from their record. A superuser can add coordinator accounts to the `Coordinators` group in Django administration.
 
 ## Main workflows
 
-1. **Onboard.** Enter approved intern records manually or download the prebuilt roster template from Upload Center. Use manual domain selection or automated matching from a preference and the selected team's domain. Use a cohort ID prefix only when authorized to issue DIT IDs locally.
-2. **Assign.** Publish a rubric with weights totaling 100%. Assign tasks individually or use the task register workbook.
+1. **Onboard.** Enter approved intern records manually or download the prebuilt roster template from Upload Center. Use manual domain selection or automated matching from a preference and the selected team's domain. Use a batch ID prefix only when authorized to issue DIT IDs locally.
+2. **Assign.** Publish a scoring guide with weights totaling 100%. Assign tasks individually or use the task register workbook.
 3. **Submit.** Interns sign in and provide an HTTPS link or a project file. The personal submission manifest supports multiple assignments and file attachments. The server derives the DIT ID from the authenticated account.
 4. **Assess.** The coordinator reviews evidence, enters scores or imports the score workbook, checks criterion feedback, and publishes Passed or Needs revision. A revision opens another submission cycle with its own deadline.
 5. **Monitor.** Team Leads use the same intern account and their read-only Team workspace. Messages go to the selected teammate's inbox. The coordinator manages attendance and exports team follow-ups, task registers, roster, attendance, and released results.
@@ -35,7 +26,7 @@ Every workbook includes an example and version metadata. Fill its Data sheet and
 
 ## Render demo
 
-The Blueprint in `render.yaml` runs one free web service in Singapore with SQLite. It imports the bundled synthetic InternTrack package into an empty database and configures the three demo logins with `DJANGO_DEMO_PASSWORD` from its Render Environment page. The source package provides historical overall scores and remarks. Approved and rejected scores are preserved as published decisions, and Under Review records remain drafts. The source does not include attendance, uploaded files, or revision deadlines.
+The Blueprint in `render.yaml` runs one free web service in Singapore with SQLite. The database starts empty, with the `DITcoordinator` account provisioned from the `DJANGO_COORDINATOR_PASSWORD` environment variable.
 
 Free Render services use an ephemeral filesystem. Database records and uploaded files reset on restart, redeploy, or idle spin-down. Use synthetic records for the hosted demo.
 

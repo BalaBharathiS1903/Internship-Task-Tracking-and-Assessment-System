@@ -13,7 +13,7 @@
   {% if coordinator %}<div><dt>Intern</dt><dd>{{ assignment.enrollment.intern }}</dd></div>{% endif %}
   <div><dt>Assigned</dt><dd>{{ assignment.assigned_date|date:"j F Y" }}</dd></div>
   <div><dt>Current deadline</dt><dd>{{ item.deadline|date:"j F Y" }}</dd></div>
-  <div><dt>Rubric</dt><dd>{{ assignment.rubric }}</dd></div>
+  <div><dt>Scoring guide</dt><dd>{{ assignment.rubric }}</dd></div>
 </dl><h3>Instructions</h3><div class="prose">{{ assignment.instructions|default:"No instructions provided."|linebreaks }}</div></section>
 <section class="panel padded"><h2>Submission history</h2>
   {% for entry, scores in timeline %}

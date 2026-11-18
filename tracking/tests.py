@@ -80,6 +80,36 @@ class Workflows(TestCase):
             with self.subTest(route=route):
                 self.assertEqual(self.client.get(reverse(route, args=args)).status_code, 200)
 
+    def test_directory_filters_and_reports(self):
+        self.client.force_login(self.coordinator)
+        m.Intern.objects.filter(pk=self.member.intern_id).update(college="Campus One")
+        roster = self.client.get(reverse("roster"), {
+            "q": self.intern.get_full_name(), "college": "Campus One", "team": self.member.team_id,
+        })
+        self.assertEqual(len(roster.context["enrollments"]), 1)
+        self.assertContains(roster, self.member.intern.dit_id)
+        page = self.client.get(reverse("tasks"), {
+            "college": "Campus One", "task_status": "Not started", "assessment_status": "Pending",
+            "date_on": "assigned", "date_from": self.assignment.assigned_date.isoformat(), "sort": "oldest",
+        })
+        self.assertIn(self.assignment.pk, [item["assignment"].pk for item in page.context["items"]])
+        reports = self.client.get(reverse("reports"))
+        self.assertContains(reports, "Team Allocation")
+        self.assertContains(reports, "Team Lead Report")
+        for kind in ("roster", "allocation", "tasks", "completed", "follow-up", "overdue", "assessment", "team-lead"):
+            workbook = self.download("export", kind)
+            self.assertIn("Report", workbook)
+        self.assertContains(self.client.get(reverse("team_report", args=[self.member.team_id])), "Print report")
+
+    def test_team_management_permissions_and_protected_deletion(self):
+        self.client.force_login(self.lead)
+        self.assertEqual(self.client.get(reverse("teams")).status_code, 403)
+        self.client.force_login(self.coordinator)
+        self.assertContains(self.client.get(reverse("teams")), "Team allocation (Excel)")
+        self.assertRedirects(self.client.post(reverse("delete_team", args=[self.member.team_id])),
+                             reverse("team_detail", args=[self.member.team_id]))
+        self.assertTrue(m.Team.objects.filter(pk=self.member.team_id).exists())
+
     def test_intern_pages_and_scoping(self):
         self.client.force_login(self.intern)
         self.assertContains(self.client.get(reverse("dashboard")), "My internship")

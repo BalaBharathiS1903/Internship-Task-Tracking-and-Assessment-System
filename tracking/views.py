@@ -8,7 +8,9 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Q, Value
+from django.db.models.deletion import ProtectedError
+from django.db.models.functions import Concat
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -20,6 +22,7 @@ from django.views.decorators.cache import never_cache
 from openpyxl import Workbook
 
 from . import forms as f, models as m, reporting as r, services as s, workbooks as w
+from . import filters as fl
 from .access import coordinator_required, intern_profile, intern_required, is_coordinator, lead_memberships, own_assignments, team_assignments
 
 
@@ -41,14 +44,16 @@ def query_scope(request):
         if not intern_profile(request.user):
             raise PermissionDenied
         queryset = own_assignments(request.user, queryset)
-    for field, lookup in (("cohort", "team__cohort_id"), ("domain", "domain_id"), ("team", "team_id")):
-        raw = request.GET.get(field, "")
-        if raw.isdecimal() and len(raw) < 16:
-            queryset = queryset.filter(**{lookup: int(raw)})
+    queryset = fl.scoped_ids(queryset, request.GET, {"cohort": "team__cohort_id", "domain": "domain_id", "team": "team_id"})
     search = request.GET.get("q", "").strip()[:100]
     if search:
+        queryset = queryset.annotate(intern_name=Concat("enrollment__intern__user__first_name", Value(" "),
+                                                       "enrollment__intern__user__last_name"))
         queryset = queryset.filter(Q(reference__icontains=search) | Q(title__icontains=search) |
-                                   Q(enrollment__intern__dit_id__icontains=search))
+                                   Q(enrollment__intern__dit_id__icontains=search) |
+                                   Q(intern_name__icontains=search))
+    if college := request.GET.get("college", "")[:160]:
+        queryset = queryset.filter(enrollment__intern__college=college)
     return queryset
 
 
@@ -82,10 +87,10 @@ def registry(request):
 
 
 SETUP = {
-    "cohort": (m.Cohort, ("name", "code", "id_prefix"), "New cohort", "registry"),
+    "cohort": (m.Cohort, ("name", "code", "id_prefix"), "New internship batch", "registry"),
     "domain": (m.Domain, ("name", "code", "cohorts"), "New domain", "registry"),
-    "team": (m.Team, ("name", "code", "cohort", "domain", "description"), "New team", "registry"),
-    "rubric": (m.Rubric, ("name", "version"), "New rubric version", "registry"),
+    "team": (m.Team, ("name", "code", "cohort", "domain", "description"), "New team", "teams"),
+    "rubric": (m.Rubric, ("name", "version"), "New scoring guide", "registry"),
     "session": (m.AttendanceSession, ("reference", "team", "date"), "New attendance session", "attendance"),
 }
 
@@ -97,6 +102,10 @@ def setup_record(request, kind):
     model, fields, title, back = SETUP[kind]
     factory = f.model_form(model, fields, {"date": f.DateInput()} if kind == "session" else None)
     form = factory(request.POST or None)
+    if "cohort" in form.fields:
+        form.fields["cohort"].label = "Internship batch"
+    if "cohorts" in form.fields:
+        form.fields["cohorts"].label = "Internship batches"
     if request.method == "POST" and form.is_valid():
         try:
             with transaction.atomic():
@@ -116,14 +125,8 @@ def setup_record(request, kind):
 
 @coordinator_required
 def roster(request):
-    enrollments = m.Enrollment.objects.select_related("intern__user", "team", "domain", "cohort").order_by("intern__dit_id")
-    term = request.GET.get("q", "")[:100]
-    if term:
-        enrollments = enrollments.filter(Q(intern__dit_id__icontains=term) | Q(intern__user__first_name__icontains=term) |
-                                         Q(intern__user__last_name__icontains=term) |
-                                         Q(intern__user__email__icontains=term) | Q(intern__college__icontains=term))
-    page = Paginator(enrollments, 20).get_page(request.GET.get("page"))
-    return render(request, "roster.html", {"enrollments": page, "page": page})
+    page = Paginator(fl.roster_records(request.GET), 20).get_page(request.GET.get("page"))
+    return render(request, "roster.html", {"enrollments": page, "page": page, "colleges": fl.college_options(), **filters()})
 
 
 @coordinator_required
@@ -203,11 +206,13 @@ def profile(request):
 @login_required
 def tasks(request):
     items = r.rows(query_scope(request))
-    state = request.GET.get("state")
-    if state in ("pending", "overdue", "complete", "missing_submission"):
-        items = [item for item in items if item[state]]
+    coordinator = is_coordinator(request.user)
+    form = fl.TaskFilters(request.GET) if coordinator else None
+    if form:
+        form.is_valid()
+    items = fl.task_rows(items, form.cleaned_data if form else {}, request.GET.get("state"), sort_newest=coordinator)
     page = Paginator(items, 20).get_page(request.GET.get("page"))
-    return render(request, "tasks.html", {"items": page, "page": page, **(filters() if is_coordinator(request.user) else {})})
+    return render(request, "tasks.html", {"items": page, "page": page, "task_filters": form})
 
 
 def task_for(user, pk):
@@ -374,7 +379,7 @@ def criterion(request, pk):
             return redirect("rubric", pk=pk)
         except (ValidationError, IntegrityError) as exc:
             form_error(form, exc)
-    return render_form(request, form, "Add rubric criterion", reverse("rubric", args=[pk]))
+    return render_form(request, form, "Add scoring criterion", reverse("rubric", args=[pk]))
 
 
 @coordinator_required
@@ -383,7 +388,7 @@ def publish_rubric(request, pk):
     item = get_object_or_404(m.Rubric, pk=pk)
     try:
         s.publish_rubric(request.user, item)
-        messages.success(request, "Rubric published and available for assignments.")
+        messages.success(request, "Scoring guide published and available for assignments.")
     except ValidationError as exc:
         messages.error(request, " ".join(exc.messages))
     return redirect("rubric", pk=pk)
@@ -557,30 +562,112 @@ def batch_errors(request, pk):
 
 
 @coordinator_required
+def teams(request):
+    directory = m.Team.objects.select_related("cohort", "domain").order_by("name", "pk")
+    return render(request, "teams.html", {"summaries": r.team_summaries(directory, r.rows(m.Assignment.objects.all()))})
+
+
+@coordinator_required
+def team_detail(request, pk):
+    team_record = get_object_or_404(m.Team.objects.select_related("cohort", "domain"), pk=pk)
+    items = r.rows(query_scope(request).filter(team=team_record))
+    summary = r.team_summaries([team_record], items)[0]
+    members = m.Enrollment.objects.filter(team=team_record).select_related("intern__user").order_by("intern__dit_id")
+    return render(request, "team_detail.html", {
+        "record": team_record, "summary": summary, "counts": summary["counts"], "members": members, "items": items,
+        "printable": request.resolver_match.url_name == "team_report",
+    })
+
+
+@coordinator_required
+def edit_team(request, pk):
+    team_record = get_object_or_404(m.Team, pk=pk)
+    factory = f.model_form(m.Team, SETUP["team"][1])
+    form = factory(request.POST or None, instance=team_record)
+    form.fields["cohort"].label = "Internship batch"
+    if team_record.enrollment_set.exists() or team_record.assignment_set.exists():
+        for field in ("cohort", "domain"):
+            form.fields[field].disabled = True
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                updated = form.save()
+                s.audit(request.user, "team.updated", updated.pk)
+            messages.success(request, "Team updated.")
+            return redirect("team_detail", pk=pk)
+        except IntegrityError as exc:
+            form_error(form, exc)
+    return render_form(request, form, "Edit team", reverse("team_detail", args=[pk]))
+
+
+@coordinator_required
+def delete_team(request, pk):
+    team_record = get_object_or_404(m.Team, pk=pk)
+    if request.method == "POST":
+        try:
+            with transaction.atomic():
+                team_record.delete()
+                s.audit(request.user, "team.deleted", pk)
+        except (ProtectedError, IntegrityError):
+            messages.error(request, "This team is still referenced by members, tasks, attendance, or messages.")
+            return redirect("team_detail", pk=pk)
+        messages.success(request, "Team deleted.")
+        return redirect("teams")
+    return render(request, "team_delete.html", {"record": team_record})
+
+
+REPORT_CARDS = [
+    ("roster", "Intern Master", "Intern details, team placement, and task counts."),
+    ("allocation", "Team Allocation", "Team-wise intern allocation and designated leads."),
+    ("tasks", "Complete Task Tracker", "Assignments, deadlines, submissions, and assessment status."),
+    ("completed", "Completed Tasks", "Assignments with a published passing decision."),
+    ("follow-up", "Pending Tasks", "Open assignments that still need action."),
+    ("overdue", "Overdue Tasks", "Unfinished assignments with missed submission deadlines."),
+    ("assessment", "Assessment Report", "Review status and published scores for submitted work."),
+    ("team-lead", "Team Lead Report", "Team membership, completion, overdue work, and assessments."),
+]
+
+
+def report_teams(params, items):
+    teams = fl.scoped_ids(m.Team.objects.select_related("cohort", "domain").order_by("name"), params,
+                          {"cohort": "cohort_id", "domain": "domain_id", "team": "pk"})
+    return r.team_summaries(teams, items)
+
+
+@coordinator_required
 def reports(request):
     items = r.rows(query_scope(request))
-    return render(request, "reports.html", {"items": [item for item in items if item["pending"]],
-                  "team_totals": r.by_team(items), "counts": r.totals(items), **filters()})
+    return render(request, "reports.html", {"cards": REPORT_CARDS, "summaries": report_teams(request.GET, items), **filters()})
 
 
 @coordinator_required
 @never_cache
 def export(request, kind):
-    if kind not in ("roster", "tasks", "follow-up", "results", "attendance"):
+    if kind not in {kind for kind, _, _ in REPORT_CARDS} | {"results", "attendance"}:
         raise Http404
     book = Workbook()
     sheet = book.active
     sheet.title = "Report"
-    if kind == "roster":
-        records = m.Enrollment.objects.select_related("intern__user", "team", "domain", "cohort")
-        for key in ("team", "domain", "cohort"):
-            value = request.GET.get(key, "")
-            if value.isdecimal() and len(value) < 16:
-                records = records.filter(**{f"{key}_id": int(value)})
-        w.add_rows(sheet, [("DIT ID", "Name", "Email", "Phone", "College", "Placement role", "Joined", "Cohort", "Domain", "Team")])
-        w.add_rows(sheet, [(item.intern.dit_id, item.intern.user.get_full_name(), item.intern.user.email, item.intern.phone,
-                            item.intern.college, item.intern.placement_role, item.intern.joined_on,
-                            item.cohort.name, item.domain.name, item.team.name if item.team else "") for item in records])
+    if kind in ("roster", "allocation"):
+        records = fl.roster_records(request.GET)
+        if kind == "roster":
+            by_intern = {}
+            for item in r.rows(m.Assignment.objects.filter(enrollment__in=records)):
+                if not item["assignment"].cancelled:
+                    counts = by_intern.setdefault(item["assignment"].enrollment_id, [0, 0])
+                    counts[0] += 1
+                    counts[1] += item["complete"]
+            w.add_rows(sheet, [("DIT ID", "Name", "Email", "Phone", "College", "Placement role", "Joined",
+                                "Internship batch", "Domain", "Team", "Tasks", "Completed")])
+            w.add_rows(sheet, [(item.intern.dit_id, item.intern.user.get_full_name(), item.intern.user.email, item.intern.phone,
+                                item.intern.college, item.intern.placement_role, item.intern.joined_on,
+                                item.cohort.name, item.domain.name, item.team.name if item.team else "",
+                                *by_intern.get(item.pk, (0, 0))) for item in records])
+        else:
+            w.add_rows(sheet, [("Team", "Internship batch", "Domain", "DIT ID", "Intern", "Role")])
+            w.add_rows(sheet, [(item.team.name, item.cohort.name, item.domain.name, item.intern.dit_id,
+                                item.intern.user.get_full_name(), "Team Lead" if item.is_lead else "Member")
+                               for item in records.filter(team__isnull=False).order_by("team__name", "-is_lead", "intern__dit_id")])
     elif kind == "attendance":
         entries = m.Attendance.objects.select_related("session__team__domain", "enrollment__intern")
         for key, lookup in (("team", "session__team_id"), ("domain", "session__team__domain_id"), ("cohort", "session__team__cohort_id")):
@@ -592,8 +679,25 @@ def export(request, kind):
                             item.enrollment.intern.dit_id, item.get_status_display()) for item in entries])
     else:
         items = r.rows(query_scope(request))
-        if kind == "results":
-            w.add_rows(sheet, [("DIT ID", "Team", "Assignment", "Rubric", "Submission", "Score / 100", "Decision")])
+        form = fl.TaskFilters(request.GET)
+        form.is_valid()
+        items = fl.task_rows(items, form.cleaned_data, request.GET.get("state"))
+        if kind == "team-lead":
+            w.add_rows(sheet, [("Internship batch", "Team", "Leader", "Members", "Total", "Completed", "Pending",
+                                "Overdue", "Assessment pending", "Completion %")])
+            w.add_rows(sheet, [(row["team"].cohort.name, row["team"].name,
+                               row["leader"].user.get_full_name() if row["leader"] else "", row["members"],
+                               *[row["counts"][key] for key in ("total", "complete", "pending", "overdue", "in_review", "percent")])
+                               for row in report_teams(request.GET, items)])
+        elif kind == "assessment":
+            w.add_rows(sheet, [("DIT ID", "Intern", "Team", "Assignment", "Scoring Guide", "Submitted",
+                                "Task status", "Assessment status", "Published score / 100")])
+            w.add_rows(sheet, [(a.enrollment.intern.dit_id, a.enrollment.intern.user.get_full_name(), a.team.name,
+                               a.reference, str(a.rubric), timezone.localdate(item["submission"].submitted_at),
+                               item["status"], item["assessment_status"], item["published"].total if item["published"] else None)
+                               for item in items if item["submission"] and not item["assignment"].cancelled for a in [item["assignment"]]])
+        elif kind == "results":
+            w.add_rows(sheet, [("DIT ID", "Team", "Assignment", "Scoring Guide", "Submission", "Score / 100", "Decision")])
             result_rows = [item for item in items if item["published"] and not item["assignment"].cancelled]
             w.add_rows(sheet, [(a.enrollment.intern.dit_id, a.team.name, a.reference, str(a.rubric),
                                 item["submission"].version, item["published"].total, item["published"].get_decision_display())
@@ -603,27 +707,30 @@ def export(request, kind):
             for item in result_rows:
                 team = item["assignment"].team
                 group.setdefault(team.pk, (team, []))[1].append(item["published"].total)
-            w.add_rows(summary, [("Cohort", "Team", "Released results", "Average / 100")])
+            w.add_rows(summary, [("Internship batch", "Team", "Released results", "Average / 100")])
             w.add_rows(summary, [(team.cohort.name, team.name, len(scores), round(sum(scores) / len(scores), 2))
                                  for team, scores in group.values()])
             w.style(summary)
         else:
             w.add_rows(sheet, [("Assignment", "Task", "DIT ID", "Team", "Domain", "Assigned", "Deadline", "Submitted",
-                                "Status", "Overdue", "Late")])
-            display = [item for item in items if item["pending"]] if kind == "follow-up" else items
+                                "Status", "Assessment", "Overdue", "Late")])
+            selected = {"follow-up": "pending", "completed": "complete", "overdue": "overdue"}.get(kind)
+            display = [item for item in items if item[selected] and not item["assignment"].cancelled] if selected else items
             w.add_rows(sheet, [(a.reference, a.title, a.enrollment.intern.dit_id, a.team.name, a.domain.name,
                                 a.assigned_date.isoformat(), item["deadline"].isoformat(),
                                 timezone.localtime(item["submission"].submitted_at).isoformat() if item["submission"] else "",
-                                item["status"], item["overdue"], item["late"])
+                                item["status"], item["assessment_status"], item["overdue"], item["late"])
                                for item in display for a in [item["assignment"]]])
             summary = book.create_sheet("Team Totals")
-            w.add_rows(summary, [("Cohort", "Team", "Assignments", "Completed", "Pending", "Overdue", "Completion %")])
+            w.add_rows(summary, [("Internship batch", "Team", "Assignments", "Completed", "Pending", "Overdue", "Completion %")])
             w.add_rows(summary, [(team.cohort.name, team.name, counts["total"], counts["complete"], counts["pending"], counts["overdue"],
                                   counts["percent"]) for team, counts in r.by_team(items)])
             w.style(summary)
     metadata = book.create_sheet("Details")
     w.add_rows(metadata, [("Report", kind), ("Generated", timezone.localtime().isoformat())] +
-               [(key, request.GET.get(key, "")[:100]) for key in ("cohort", "team", "domain", "q")])
+               [(key, request.GET.get(key, "")[:160]) for key in
+                ("cohort", "team", "domain", "q", "college", "state", "task_status", "assessment_status",
+                 "date_on", "date_from", "date_to", "sort")])
     w.style(metadata)
     w.style(sheet)
     s.audit(request.user, "report.exported", kind)

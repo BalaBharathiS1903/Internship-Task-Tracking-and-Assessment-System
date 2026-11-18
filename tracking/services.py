@@ -50,7 +50,7 @@ def register_intern(actor, *, reference, name, cohort, dit_id="", email="", doma
         raise ValidationError("This DIT ID is already registered.")
     if not dit_id:
         if not cohort.id_prefix:
-            raise ValidationError("Supply the official DIT ID. Local issuance is disabled for this cohort.")
+            raise ValidationError("Supply the official DIT ID. Local issuance is disabled for this internship batch.")
         while True:
             dit_id = f"{cohort.id_prefix}{cohort.next_id:04d}"
             cohort.next_id += 1
@@ -99,7 +99,7 @@ def assign_task(actor, *, enrollment, existing=None, **values):
         raise ValidationError("Assign the intern to a team first.")
     assignment = existing or m.Assignment(enrollment=enrollment, team=enrollment.team, domain=enrollment.domain)
     if existing and existing.submissions.exists() and values["rubric"].pk != existing.rubric_id:
-        raise ValidationError("The rubric is fixed after the first submission.")
+        raise ValidationError("The scoring guide is fixed after the first submission.")
     for field, value in values.items():
         setattr(assignment, field, value)
     save_checked(assignment)
@@ -180,7 +180,7 @@ def add_criterion(actor, rubric, **values):
     allow_coordinator(actor)
     rubric = m.Rubric.objects.select_for_update().get(pk=rubric.pk)
     if rubric.published:
-        raise ValidationError("Create a new rubric version to change published criteria.")
+        raise ValidationError("Create a new scoring guide version to change published criteria.")
     return save_checked(m.Criterion(rubric=rubric, **values))
 
 
@@ -204,7 +204,7 @@ def assess(actor, submission, entries, *, decision="", revision_due=None):
     for criterion_id, values in entries.items():
         criterion = criteria.get(criterion_id)
         if criterion is None:
-            raise ValidationError("The criterion is outside this submission's rubric.")
+            raise ValidationError("The criterion is outside this submission's scoring guide.")
         value, comment, feedback = values
         if value < criterion.minimum or value > criterion.maximum or (value - criterion.minimum) % criterion.step:
             raise ValidationError(f"{criterion.name}: use {criterion.minimum}–{criterion.maximum} in increments of {criterion.step}.")

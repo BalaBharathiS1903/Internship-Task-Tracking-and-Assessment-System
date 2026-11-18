@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Team management{% endblock %}
+{% block crumb %}Team management{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>Team management</h1></div></div>
+<section class="panel">
+  <div class="panel-heading"><h2>Teams</h2><div class="actions"><a class="button secondary small" href="{% url 'export' 'allocation' %}">{% include "icon.html" with name="reports" only %} Team allocation (Excel)</a><a class="button primary small" href="{% url 'setup' 'team' %}">＋ Create team</a></div></div>
+  <div class="table-wrap"><table><thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Tasks</th><th>Overdue</th><th>Completion</th><th>Actions</th></tr></thead>
+  <tbody>{% for row in summaries %}
+    <tr><td><a class="row-title" href="{% url 'team_detail' row.team.pk %}">{{ row.team.name }}</a><small>{{ row.team.description|default:row.team.cohort }}</small></td>
+    <td>{% if row.leader %}{{ row.leader.user.get_full_name }}<small>{{ row.leader.dit_id }}</small>{% else %}Unassigned{% endif %}</td>
+    <td>{{ row.members }}</td><td>{{ row.counts.complete }}/{{ row.counts.total }}</td><td>{{ row.counts.overdue }}</td>
+    <td>{% include "completion.html" with counts=row.counts only %}</td>
+    <td><div class="actions table-actions">
+      <a class="button secondary small icon-button" href="{% url 'team_detail' row.team.pk %}" aria-label="View {{ row.team.name }}" title="View team">{% include "icon.html" with name="eye" only %}</a>
+      <a class="button secondary small icon-button" href="{% url 'edit_team' row.team.pk %}" aria-label="Edit {{ row.team.name }}" title="Edit team">{% include "icon.html" with name="edit" only %}</a>
+      <a class="button secondary small icon-button" href="{% url 'delete_team' row.team.pk %}" aria-label="Delete {{ row.team.name }}" title="Delete team">{% include "icon.html" with name="delete" only %}</a>
+    </div></td></tr>
+  {% empty %}<tr><td class="empty" colspan="7">No teams yet. Create a team after setting up an internship batch and domain.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endblock %}

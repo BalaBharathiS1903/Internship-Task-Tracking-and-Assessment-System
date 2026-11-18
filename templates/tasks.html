@@ -5,7 +5,10 @@
 <div class="page-heading"><div><h1>{% if coordinator %}Task tracker{% else %}My work{% endif %}</h1><p>{% if coordinator %}Assign work and track each submission through assessment.{% else %}Track deadlines, submissions, and revision requests.{% endif %}</p></div>
   <div class="actions">{% if coordinator %}<a class="button primary" href="{% url 'new_task' %}">＋ Assign task</a>{% endif %}<a class="button secondary" href="{% url 'new_batch' kind=coordinator|yesno:'tasks,submissions' %}">Bulk upload</a></div>
 </div>
-{% if coordinator %}{% include "filters.html" %}{% endif %}
+{% if coordinator %}{% include "task_filters.html" %}{% endif %}
 <div class="tabs"><a href="{% querystring state=None %}" {% if not request.GET.state %}aria-current="page"{% endif %}>All</a><a href="{% querystring state='pending' %}" {% if request.GET.state == 'pending' %}aria-current="page"{% endif %}>Pending</a><a href="{% querystring state='overdue' %}" {% if request.GET.state == 'overdue' %}aria-current="page"{% endif %}>Overdue</a><a href="{% querystring state='missing_submission' %}" {% if request.GET.state == 'missing_submission' %}aria-current="page"{% endif %}>Missing submission</a><a href="{% querystring state='complete' %}" {% if request.GET.state == 'complete' %}aria-current="page"{% endif %}>Completed</a></div>
-<section class="panel">{% include "task_table.html" %}{% include "pagination.html" %}</section>
+<section class="panel">
+  {% if coordinator %}<div class="panel-heading"><h2>Tasks ({{ page.paginator.count }})</h2><a class="button secondary small" href="{% url 'export' 'tasks' %}?{{ request.GET.urlencode }}">{% include "icon.html" with name="reports" only %} Export Excel</a></div>{% endif %}
+  {% include "task_table.html" with detailed=coordinator %}{% include "pagination.html" %}
+</section>
 {% endblock %}

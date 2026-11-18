@@ -46,6 +46,7 @@ def describe(assignment, today):
         "late": bool(current and timezone.localdate(current.submitted_at) > current.deadline),
         "can_submit": awaiting and not assignment.cancelled and assignment.assigned_date <= today,
         "status": status,
+        "assessment_status": published.get_decision_display() if published else "Under review" if evaluation else "Pending",
         "tone": "green" if complete else "orange" if overdue else "blue" if current else "muted",
         "pending": not assignment.cancelled and not complete,
         "missing_submission": not assignment.cancelled and not current,
@@ -83,6 +84,18 @@ def by_team(items):
         team = item["assignment"].team
         teams.setdefault(team.pk, (team, []))[1].append(item)
     return [(team, totals(team_rows)) for team, team_rows in teams.values()]
+
+
+def team_summaries(teams, items):
+    totals_by_id = {team.pk: counts for team, counts in by_team(items)}
+    summaries = {team.pk: {"team": team, "counts": totals_by_id.get(team.pk, totals([])),
+                           "members": 0, "leader": None} for team in teams}
+    for enrollment in m.Enrollment.objects.filter(team_id__in=summaries).select_related("intern__user"):
+        summary = summaries[enrollment.team_id]
+        summary["members"] += 1
+        if enrollment.is_lead:
+            summary["leader"] = enrollment.intern
+    return list(summaries.values())
 
 
 def attendance_summary(entries):

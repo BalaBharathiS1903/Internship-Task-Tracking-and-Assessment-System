@@ -114,6 +114,37 @@ progress { accent-color: var(--brand-blue); }
 .attention .empty { padding: .9rem 1.15rem; }
 .table-wrap { overflow-x: auto; }
 .pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .7rem; padding: .8rem 1.15rem; border-top: 1px solid var(--line); color: var(--subtle); font-size: .84rem; }
+.filter-panel { display: grid; gap: .85rem; padding: 1rem 1.2rem; }
+.filter-row { display: grid; align-items: end; gap: .65rem; }
+.roster-filters { grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr)) minmax(9rem, .66fr); }
+.task-filters-top { grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr)); }
+.task-filters-bottom { grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(9rem, .9fr); }
+.filter-row label { min-width: 0; font-size: .79rem; }
+.filter-actions { display: flex; gap: .45rem; align-items: end; }
+.filter-actions .primary { flex: 1; }
+.icon-button { min-width: 39px; padding-inline: .45rem; }
+.icon-button.small { min-width: 33px; }
+.table-actions { flex-wrap: nowrap; }
+.completion-cell { display: flex; align-items: center; gap: .6rem; min-width: 8rem; }
+.completion-cell progress { flex: 1; width: 5rem; height: .5rem; }
+.completion-cell strong { min-width: 3ch; }
+.report-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .85rem; margin-bottom: 1.15rem; }
+.report-card { display: flex; flex-direction: column; align-items: start; gap: .58rem; padding: 1.1rem 1.15rem; margin: 0; }
+.report-card h2 { display: flex; align-items: center; gap: .5rem; font-size: 1rem; }
+.report-card h2 .icon { color: var(--brand-blue-dark); }
+.report-card p { margin-bottom: .45rem; color: var(--subtle); font-size: .84rem; }
+.report-card a { margin-top: auto; }
+@media (max-width: 1150px) {
+  .report-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .task-filters-top, .task-filters-bottom { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 650px) {
+  .filter-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .roster-filters label:first-child, .task-filters-top label:first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 420px) {
+  .report-grid { grid-template-columns: 1fr; }
+}
 table { width: 100%; border-collapse: collapse; text-align: left; font-size: .87rem; }
 th { background: #f5f9fa; color: #48616f; font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
 td, th { padding: .75rem .88rem; border-bottom: 1px solid #e9eff1; vertical-align: middle; }

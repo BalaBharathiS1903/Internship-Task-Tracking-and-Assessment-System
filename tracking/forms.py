@@ -16,8 +16,8 @@ class RosterForm(forms.Form):
     name = forms.CharField(max_length=150, label="Full name")
     email = forms.EmailField(required=False)
     dit_id = forms.CharField(max_length=40, required=False, label="Official DIT ID",
-                             help_text="Leave blank only if this cohort authorizes local issuance.")
-    cohort = forms.ModelChoiceField(queryset=m.Cohort.objects.order_by("name"))
+                             help_text="Leave blank only if this batch authorizes local issuance.")
+    cohort = forms.ModelChoiceField(label="Internship batch", queryset=m.Cohort.objects.order_by("name"))
     mode = forms.ChoiceField(label="Domain allocation", choices=[("manual", "Manual selection"), ("auto", "Automatic matching")])
     domain = forms.ModelChoiceField(queryset=m.Domain.objects.order_by("name"), required=False)
     preferred_domain = forms.ModelChoiceField(queryset=m.Domain.objects.order_by("name"), required=False)
@@ -43,9 +43,9 @@ class AssignmentForm(forms.Form):
     task_code = forms.CharField(max_length=40)
     title = forms.CharField(max_length=150)
     enrollment = forms.ModelChoiceField(
-        label="Intern and cohort", queryset=m.Enrollment.objects.filter(team__isnull=False).select_related("intern__user", "cohort"),
+        label="Intern and internship batch", queryset=m.Enrollment.objects.filter(team__isnull=False).select_related("intern__user", "cohort"),
     )
-    rubric = forms.ModelChoiceField(queryset=m.Rubric.objects.filter(published=True))
+    rubric = forms.ModelChoiceField(label="Scoring guide", queryset=m.Rubric.objects.filter(published=True))
     assigned_date = forms.DateField(widget=DateInput())
     due_date = forms.DateField(widget=DateInput())
     instructions = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), required=False)

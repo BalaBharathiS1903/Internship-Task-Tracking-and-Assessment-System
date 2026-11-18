@@ -1,0 +1,1 @@
+<div class="completion-cell"><progress aria-label="Completion" max="{{ counts.total|default:1 }}" value="{{ counts.complete }}"></progress><strong>{% if counts.percent != None %}{{ counts.percent|floatformat:"-1" }}%{% else %}—{% endif %}</strong></div>

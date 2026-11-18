@@ -1,0 +1,24 @@
+<form class="panel filter-panel" method="get" aria-label="Task filters">
+  {% if task_filters.errors %}<div class="alert error">Check the selected filters. {{ task_filters.errors }}</div>{% endif %}
+  <div class="filter-row task-filters-top">
+    <label>{{ task_filters.q.label }}{{ task_filters.q }}</label>
+    <label>{{ task_filters.team.label }}{{ task_filters.team }}</label>
+    <label>{{ task_filters.college.label }}{{ task_filters.college }}</label>
+    <label>{{ task_filters.task_status.label }}{{ task_filters.task_status }}</label>
+    <label>{{ task_filters.assessment_status.label }}{{ task_filters.assessment_status }}</label>
+  </div>
+  <div class="filter-row task-filters-bottom">
+    <label>{{ task_filters.date_on.label }}{{ task_filters.date_on }}</label>
+    <label>{{ task_filters.date_from.label }}{{ task_filters.date_from }}</label>
+    <label>{{ task_filters.date_to.label }}{{ task_filters.date_to }}</label>
+    <label>{{ task_filters.sort.label }}{{ task_filters.sort }}</label>
+    <div class="filter-actions"><button class="button primary">{% include "icon.html" with name="filter" only %} Apply</button><a class="button secondary icon-button" href="{% url 'tasks' %}" aria-label="Clear task filters" title="Clear filters">{% include "icon.html" with name="close" only %}</a></div>
+  </div>
+  <details {% if request.GET.cohort or request.GET.domain %}open{% endif %}>
+    <summary>Batch and domain filters</summary>
+    <div class="filter-row task-filters-bottom">
+      <label>{{ task_filters.cohort.label }}{{ task_filters.cohort }}</label>
+      <label>{{ task_filters.domain.label }}{{ task_filters.domain }}</label>
+    </div>
+  </details>
+</form>

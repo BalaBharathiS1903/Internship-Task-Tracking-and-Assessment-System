@@ -1,18 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Reports{% endblock %}
+{% block title %}Reports &amp; Excel export{% endblock %}
 {% block crumb %}Reports{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Reports</h1><p>Review team completion and export the workbooks for this selection.</p></div><button class="button secondary print-hidden" type="button" onclick="window.print()">Print follow-up report</button></div>
+<div class="page-heading"><div><h1>Reports &amp; Excel export</h1></div><div class="actions"><a class="button secondary" href="{% url 'export' 'attendance' %}?{{ request.GET.urlencode }}">Attendance export</a></div></div>
 {% include "filters.html" %}
-{% include "stats.html" %}
-<div class="actions export-actions print-hidden">
-<a class="button secondary" href="{% url 'export' 'follow-up' %}?{{ request.GET.urlencode }}">↓ Follow-up list</a>
-<a class="button secondary" href="{% url 'export' 'tasks' %}?{{ request.GET.urlencode }}">↓ Task register</a>
-<a class="button secondary" href="{% url 'export' 'results' %}?{{ request.GET.urlencode }}">↓ Results</a>
-<a class="button secondary" href="{% url 'export' 'roster' %}?{{ request.GET.urlencode }}">↓ Intern master</a>
-<a class="button secondary" href="{% url 'export' 'attendance' %}?{{ request.GET.urlencode }}">↓ Attendance</a>
+<div class="report-grid">
+{% for kind, title, description in cards %}
+  <article class="panel report-card">
+    <h2>{% include "icon.html" with name="reports" only %} {{ title }}</h2>
+    <p>{{ description }}</p>
+    <a class="button secondary small" href="{% url 'export' kind %}?{{ request.GET.urlencode }}" aria-label="Download {{ title }} as Excel">{% include "icon.html" with name="download" only %} Download .xlsx</a>
+  </article>
+{% endfor %}
 </div>
-<section class="panel"><div class="panel-heading"><h2>Team totals</h2></div><div class="table-wrap"><table><thead><tr><th>Team</th><th>Assignments</th><th>Completed</th><th>Pending</th><th>Overdue</th><th>Completion</th></tr></thead><tbody>
-{% for team, item in team_totals %}<tr><td><strong>{{ team }}</strong><small>{{ team.domain }} · {{ team.cohort }}</small></td><td>{{ item.total }}</td><td>{{ item.complete }}</td><td>{{ item.pending }}</td><td>{{ item.overdue }}</td><td>{% if item.percent != None %}{{ item.percent|floatformat:"-1" }}%{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="6" class="empty">No team totals available for this selection.</td></tr>{% endfor %}</tbody></table></div></section>
-<section class="panel"><div class="panel-heading"><h2>Pending assignments</h2></div>{% include "task_table.html" %}</section>
+<section class="panel">
+  <div class="panel-heading"><div><h2>Team lead reports</h2><p>Open a printable report for each team.</p></div></div>
+  <div class="table-wrap"><table><thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Total</th><th>Completed</th><th>Pending</th><th>Overdue</th><th>Assessment pending</th><th>Completion</th><th>Action</th></tr></thead>
+  <tbody>{% for row in summaries %}
+    <tr><td><strong>{{ row.team.name }}</strong><small>{{ row.team.cohort }}</small></td><td>{% if row.leader %}{{ row.leader.user.get_full_name }}{% else %}Unassigned{% endif %}</td>
+    <td>{{ row.members }}</td><td>{{ row.counts.total }}</td><td>{{ row.counts.complete }}</td><td>{{ row.counts.pending }}</td><td>{{ row.counts.overdue }}</td><td>{{ row.counts.in_review }}</td>
+    <td>{% include "completion.html" with counts=row.counts only %}</td>
+    <td><a class="button primary small" href="{% url 'team_report' row.team.pk %}?{{ request.GET.urlencode }}" aria-label="Open report for {{ row.team.name }}">{% include "icon.html" with name="reports" only %} Open report</a></td></tr>
+  {% empty %}<tr><td class="empty" colspan="10">No teams match this selection.</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
 {% endblock %}

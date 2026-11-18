@@ -1,18 +1,26 @@
 import os
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 
 class Command(BaseCommand):
-    help = "Initialize the hosted demo or create the first production coordinator."
+    help = "Create the initial coordinator on an empty hosted workspace."
 
     @transaction.atomic
     def handle(self, *args, **options):
-        if os.environ.get("DJANGO_SQLITE_DEMO") == "1" and os.environ.get("DJANGO_DEMO_PASSWORD"):
-            call_command("load_interntrack", stdout=self.stdout)
+        if os.environ.get("DJANGO_SQLITE_DEMO") == "1":
+            password = os.environ.get("DJANGO_COORDINATOR_PASSWORD") or os.environ.get("DJANGO_DEMO_PASSWORD")
+            if not password:
+                raise CommandError("Set DJANGO_COORDINATOR_PASSWORD to provision the hosted coordinator.")
+            users = get_user_model().objects
+            if not users.filter(username="DITcoordinator").exists():
+                coordinator = users.create_user("DITcoordinator", password=password,
+                                                first_name="Internship", last_name="Coordinator")
+                coordinator.groups.add(Group.objects.get_or_create(name="Coordinators")[0])
+                self.stdout.write("Initial coordinator account created.")
             return
         username = os.environ.get("DJANGO_SUPERUSER_USERNAME")
         if not username:

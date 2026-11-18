@@ -24,7 +24,8 @@
         <a href="{% url 'dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}aria-current="page"{% endif %}>{% include "icon.html" with name="dashboard" only %} Overview</a>
         {% if coordinator %}
         <a href="{% url 'roster' %}" {% if request.resolver_match.url_name == 'roster' %}aria-current="page"{% endif %}>{% include "icon.html" with name="users" only %} Intern master</a>
-        <a href="{% url 'registry' %}" {% if request.resolver_match.url_name == 'registry' %}aria-current="page"{% endif %}>{% include "icon.html" with name="team" only %} Cohorts &amp; setup</a>
+        <a href="{% url 'teams' %}" {% if request.resolver_match.url_name == 'teams' %}aria-current="page"{% endif %}>{% include "icon.html" with name="team" only %} Team management</a>
+        <a href="{% url 'registry' %}" {% if request.resolver_match.url_name == 'registry' %}aria-current="page"{% endif %}>{% include "icon.html" with name="book" only %} Program setup</a>
         {% else %}
         <a href="{% url 'profile' %}" {% if request.resolver_match.url_name == 'profile' %}aria-current="page"{% endif %}>{% include "icon.html" with name="users" only %} My profile</a>
         {% endif %}

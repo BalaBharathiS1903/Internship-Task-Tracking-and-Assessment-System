@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Delete team{% endblock %}
+{% block content %}
+<section class="panel padded form-width">
+  <h1>Delete {{ record.name }}?</h1>
+  <p>Teams linked to members, tasks, attendance, or messages must be kept.</p>
+  <form method="post" class="stack">{% csrf_token %}<div class="actions"><button class="button primary">Delete team</button><a class="button secondary" href="{% url 'teams' %}">Cancel</a></div></form>
+</section>
+{% endblock %}
