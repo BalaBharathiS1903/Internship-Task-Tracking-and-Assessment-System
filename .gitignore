@@ -5,3 +5,4 @@ __pycache__/
 .env
 private_uploads/
 staticfiles/
+outputs/

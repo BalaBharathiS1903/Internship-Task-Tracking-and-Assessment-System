@@ -44,7 +44,7 @@ def register_intern(actor, *, reference, name, cohort, dit_id="", email="", doma
     if domain is None:
         raise ValidationError("Select a domain in manual mode.")
     if m.Intern.objects.filter(reference=reference).exists():
-        raise ValidationError("This roster reference already exists. Open its profile to make changes.")
+        raise ValidationError("This intern reference already exists. Open the intern’s profile to make changes.")
     if not name.strip():
         raise ValidationError("Enter the intern's full name.")
     if dit_id and m.Intern.objects.filter(dit_key=dit_id.strip().upper()).exists():

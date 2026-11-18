@@ -9,7 +9,7 @@
 </div></div>
 {% if batch.committed_at %}<div class="alert success">Committed {{ batch.rows|length }} rows on {{ batch.committed_at|date:"j M Y, H:i" }}.</div>
 {% else %}
-<p class="alert {% if errors %}error{% else %}success{% endif %}">{% if errors %}{{ errors }} row{{ errors|pluralize }} need correction before you can commit.{% else %}{{ result|length }} rows passed validation.{% endif %}</p>
+<p class="alert {% if errors %}error{% else %}success{% endif %}">{% if errors %}{{ errors }} validation issue{{ errors|pluralize }} to fix before committing.{% else %}{{ batch.rows|length }} rows passed validation.{% endif %}</p>
 <section class="panel"><div class="table-wrap"><table><thead><tr><th>Excel row</th><th>Reference</th><th>Validation result</th></tr></thead><tbody>{% for item in result %}<tr><td>{{ item.number }}</td><td>{{ item.reference }}</td><td>{% if item.error %}<span class="badge orange">Error</span> {{ item.error }}{% else %}<span class="badge green">Ready</span> {{ item.detail }}{% endif %}</td></tr>{% endfor %}</tbody></table></div></section>
 {% endif %}
 {% endblock %}

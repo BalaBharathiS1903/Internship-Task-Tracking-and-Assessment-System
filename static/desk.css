@@ -178,6 +178,15 @@ td > small { display: block; font-size: .75rem; margin-top: .17rem; }
 .public .form-width { margin-inline: auto; }
 .stack { display: grid; gap: .95rem; }
 .stack p { display: grid; gap: .3rem; }
+.form-width-grid { max-width: 900px; width: 100%; }
+.record-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.2rem; }
+.record-field { display: grid; gap: .3rem; align-content: start; }
+.record-field:has(textarea), .record-field:has(input[type=checkbox]) { grid-column: 1 / -1; }
+.record-field:has(input[type=checkbox]) { display: flex; align-items: center; flex-wrap: wrap; gap: .45rem; }
+.check-control { display: flex; align-items: start; gap: .55rem; }
+.check-control input { flex: 0 0 auto; margin-top: .2rem; }
+.check-control small { margin-top: .2rem; }
+@media (max-width: 580px) { .record-form { grid-template-columns: minmax(0, 1fr); } }
 label { display: grid; gap: .26rem; font-size: .85rem; font-weight: 650; color: #284757; }
 input:not([type=checkbox]), textarea, select { display: block; width: 100%; min-height: 39px; padding: .52rem .62rem; border: 1px solid #becfd5; border-radius: 8px; background: #fff; color: var(--ink); }
 input[type=checkbox] { width: 1.05rem; height: 1.05rem; accent-color: var(--brand-blue); }

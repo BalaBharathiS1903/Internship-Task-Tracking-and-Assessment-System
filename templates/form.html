@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<div class="form-width">
+<div class="form-width{% if form_grid %} form-width-grid{% endif %}">
   <a class="text-link back" href="{{ back }}">← Back</a>
   <div class="page-heading"><div><h1>{{ title }}</h1>{% if description %}<p>{{ description }}</p>{% endif %}</div></div>
   {% if invite %}<section class="panel padded"><h2>Account activation</h2><p>Share this one-time link privately with the verified intern.</p><input type="text" readonly value="{{ invite }}" aria-label="Private activation link" onclick="this.select()"></section>{% endif %}
@@ -13,8 +13,12 @@
   <section class="panel padded">
     <form class="stack" method="post" enctype="multipart/form-data">
       {% csrf_token %}
-      {{ form.as_p }}
-      <div class="actions"><button class="button primary" type="submit">{{ button }}</button><a class="button secondary" href="{{ back }}">Cancel</a></div>
+      {% if form_grid %}
+        {{ form.non_field_errors }}
+        <div class="record-form">{% for field in form.visible_fields %}<div class="record-field">{{ field.as_field_group }}</div>{% endfor %}</div>
+        {% for field in form.hidden_fields %}{{ field }}{% endfor %}
+      {% else %}{{ form.as_p }}{% endif %}
+      <div class="actions"><button class="button primary" type="submit">{% include "icon.html" with name="check" only %} {{ button }}</button><a class="button secondary" href="{{ back }}">Cancel</a></div>
     </form>
   </section>
 </div>

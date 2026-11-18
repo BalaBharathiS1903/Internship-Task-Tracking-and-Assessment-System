@@ -12,7 +12,7 @@ class DateInput(forms.DateInput):
 
 
 class RosterForm(forms.Form):
-    reference = forms.CharField(max_length=40, label="Roster reference")
+    reference = forms.CharField(max_length=40, label="Intern reference")
     name = forms.CharField(max_length=150, label="Full name")
     email = forms.EmailField(required=False)
     dit_id = forms.CharField(max_length=40, required=False, label="Official DIT ID",

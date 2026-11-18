@@ -42,7 +42,7 @@ class Team(models.Model):
 
     def clean(self):
         if self.cohort_id and self.domain_id and not self.domain.cohorts.filter(pk=self.cohort_id).exists():
-            raise ValidationError({"domain": "Enable this domain for the cohort first."})
+            raise ValidationError({"domain": "Enable this domain for the internship batch first."})
 
     def __str__(self):
         return self.name
@@ -86,13 +86,13 @@ class Enrollment(models.Model):
 
     def clean(self):
         if self.domain_id and self.cohort_id and not self.domain.cohorts.filter(pk=self.cohort_id).exists():
-            raise ValidationError({"domain": "Select a domain enabled for this cohort."})
+            raise ValidationError({"domain": "Select a domain enabled for this internship batch."})
         if self.preferred_domain_id and self.cohort_id and not self.preferred_domain.cohorts.filter(
             pk=self.cohort_id
         ).exists():
-            raise ValidationError({"preferred_domain": "Select a preference enabled for this cohort."})
+            raise ValidationError({"preferred_domain": "Select a preference enabled for this internship batch."})
         if self.team_id and (self.team.cohort_id != self.cohort_id or self.team.domain_id != self.domain_id):
-            raise ValidationError({"team": "Select a team in this cohort and domain."})
+            raise ValidationError({"team": "Select a team in this internship batch and domain."})
         if self.is_lead and not self.team_id:
             raise ValidationError({"is_lead": "A team lead must belong to a team."})
 
@@ -252,9 +252,16 @@ class ImportBatch(models.Model):
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     kind = models.CharField(max_length=30)
     rows = models.JSONField(default=list)
+    setup_rows = models.JSONField(default=list, blank=True)
     filename = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     committed_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def workflow_name(self):
+        from .workbooks import SCHEMAS
+
+        return SCHEMAS[self.kind][0]
 
 
 def staged_path(instance, filename):

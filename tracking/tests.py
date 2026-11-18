@@ -58,12 +58,13 @@ class Workflows(TestCase):
         self.assertEqual(response.status_code, 200)
         return load_workbook(BytesIO(b"".join(response.streaming_content)))
 
-    def upload_batch(self, kind, workbook, files=()):
+    def upload_batch(self, kind, workbook, files=(), *, include_setup=False):
         output = BytesIO()
         workbook.save(output)
         response = self.client.post(reverse("new_batch", args=[kind]), {
             "workbook": SimpleUploadedFile(f"{kind}.xlsx", output.getvalue()),
             "artifacts": files,
+            "include_setup": "1" if include_setup else "",
         })
         self.assertEqual(response.status_code, 302, response.content[:600])
         batch_url = response["Location"]
@@ -231,6 +232,28 @@ class Workflows(TestCase):
         self.assertContains(preview, "one consistent preference")
         self.assertEqual(self.client.post(batch).status_code, 200)
         self.assertFalse(m.Intern.objects.filter(reference__in=["NEW-02", "NEW-03"]).exists())
+
+    def test_intern_master_setup_requires_opt_in_and_commits_with_the_interns(self):
+        self.client.force_login(self.coordinator)
+        book = self.download("template", "roster")
+        self.assertEqual(book["Data"]["D1"].value, "internship_batch")
+        book["Setup"].append(("2026", "Internship 2026", "DIT-26-", "WEB", "Web", "WEB-A", "Web A"))
+        book["Data"].append(("NEW-SETUP", "New Intern", "", "2026", "", "manual", "WEB", "", "WEB-A"))
+
+        _, preview = self.upload_batch("roster", book)
+        self.assertContains(preview, "Internship batch code 2026 is not configured.")
+        batch, preview = self.upload_batch("roster", book, include_setup=True)
+        self.assertContains(preview, "local DIT ID prefix DIT-26-")
+        self.assertContains(preview, "DIT-26-0001")
+        self.assertFalse(m.Cohort.objects.filter(code="2026").exists())
+        self.assertFalse(m.Intern.objects.filter(reference="NEW-SETUP").exists())
+
+        self.assertEqual(self.client.post(batch).status_code, 302)
+        enrollment = m.Enrollment.objects.get(intern__reference="NEW-SETUP")
+        self.assertEqual(enrollment.cohort.code, "2026")
+        self.assertEqual(enrollment.team.code, "WEB-A")
+        self.assertEqual(enrollment.intern.dit_id, "DIT-26-0001")
+        self.assertEqual(self.client.post(batch).status_code, 302)
 
     def test_coordinator_can_assign_manually_and_through_task_register(self):
         self.client.force_login(self.coordinator)

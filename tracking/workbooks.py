@@ -21,7 +21,7 @@ from .access import own_assignments
 from .reporting import rows
 
 SCHEMAS = {
-    "roster": ("Intern master", ("reference", "name", "email", "cohort", "dit_id", "mode", "domain", "preferred_domain", "team")),
+    "roster": ("Intern Master", ("reference", "name", "email", "cohort", "dit_id", "mode", "domain", "preferred_domain", "team")),
     "tasks": ("Task register", ("reference", "task_code", "title", "dit_id", "cohort", "team", "rubric", "assigned_date", "due_date", "instructions")),
     "submissions": ("Submission manifest", ("assignment", "artifact", "link", "note")),
     "attendance": ("Attendance register", ("session", "dit_id", "status", "reason")),
@@ -38,6 +38,11 @@ EXAMPLES = {
 }
 MAX_ROWS = 500
 VERSION = "1"
+SETUP_COLUMNS = ("internship_batch", "batch_name", "local_dit_prefix", "domain", "domain_name", "team", "team_name")
+
+
+def template_headers(kind):
+    return tuple("internship_batch" if header == "cohort" else header for header in SCHEMAS[kind][1])
 
 
 def style(sheet):
@@ -75,7 +80,7 @@ def template(kind, user):
     book = Workbook()
     sheet = book.active
     sheet.title = "Data"
-    add_rows(sheet, [headers])
+    add_rows(sheet, [template_headers(kind)])
     help_sheet = book.create_sheet("Instructions")
     info = [
         ("Workflow", label), ("Version", VERSION),
@@ -86,9 +91,12 @@ def template(kind, user):
         info.append(("Artifact", "Enter the exact filename of an attached file, or use an HTTPS link. Remove unused rows."))
         eligible = [item for item in rows(own_assignments(user, m.Assignment.objects.all())) if item["can_submit"]]
         add_rows(sheet, [(item["assignment"].reference, "", "", "") for item in eligible[:MAX_ROWS]])
+    if kind == "roster":
+        info.append(("Optional setup", "To add missing batches, domains, or teams, fill the Setup sheet and enable setup on the upload page."))
+        info.append(("Local DIT prefix", "Set a prefix only for a new internship batch authorized to generate local DIT IDs. Leave blank for official IDs only."))
     add_rows(help_sheet, info)
     examples = book.create_sheet("Example")
-    add_rows(examples, [headers, EXAMPLES[kind]])
+    add_rows(examples, [template_headers(kind), EXAMPLES[kind]])
     setup = book.create_sheet("Lists")
     setup.sheet_state = "hidden"
     choices = {
@@ -116,14 +124,19 @@ def template(kind, user):
             validation.add(f"{letter}2:{letter}{MAX_ROWS + 1}")
     for page in (sheet, help_sheet, examples):
         style(page)
+    if kind == "roster":
+        setup_sheet = book.create_sheet("Setup")
+        add_rows(setup_sheet, [SETUP_COLUMNS])
+        style(setup_sheet)
     if kind != "submissions":
         for column in sheet.columns:
             if column[0].value in ("reference", "dit_id", "code", "team"):
                 sheet.column_dimensions[column[0].column_letter].number_format = "@"
-    return workbook_response(book, f"{kind}-template.xlsx")
+    filename = "intern-master" if kind == "roster" else kind
+    return workbook_response(book, f"{filename}-template.xlsx")
 
 
-def parse(upload, kind):
+def parse(upload, kind, *, include_setup=False):
     if not upload.name.lower().endswith(".xlsx") or upload.size > 5 * 1024 * 1024:
         raise ValidationError("Use a prebuilt .xlsx workbook no larger than 5 MB.")
     try:
@@ -135,13 +148,13 @@ def parse(upload, kind):
         try:
             headers = SCHEMAS[kind][1]
             metadata = book["Instructions"]
-            if str(metadata["B2"].value) != VERSION or metadata["B1"].value != SCHEMAS[kind][0]:
+            if str(metadata["B2"].value) != VERSION or str(metadata["B1"].value).strip().casefold() != SCHEMAS[kind][0].casefold():
                 raise ValidationError("Download the current template for this workflow.")
             data = book["Data"]
             data.reset_dimensions()
             sheet_rows = data.iter_rows(max_col=len(headers) + 1)
             actual = next(sheet_rows, ())
-            if tuple(cell.value for cell in actual[:len(headers)]) != headers or actual[-1].value is not None:
+            if tuple(cell.value for cell in actual[:len(headers)]) not in (headers, template_headers(kind)) or actual[-1].value is not None:
                 raise ValidationError("The Data sheet headers must match the selected template.")
             result = []
             for number, sheet_row in enumerate(sheet_rows, 2):
@@ -161,11 +174,85 @@ def parse(upload, kind):
                 result.append({"number": number, **values})
             if not result:
                 raise ValidationError("Add at least one data row to the workbook.")
-            return result
+            return result, parse_setup(book) if include_setup else []
         finally:
             book.close()
     except (BadZipFile, InvalidFileException, ParseError, DefusedXmlException, KeyError, OSError, ValueError) as exc:
         raise ValidationError("The workbook could not be read. Download a fresh template.") from exc
+
+
+def parse_setup(book):
+    if "Setup" not in book:
+        raise ValidationError("Add a Setup sheet before enabling setup, or use the existing records in Program setup.")
+    sheet = book["Setup"]
+    sheet.reset_dimensions()
+    data = sheet.iter_rows(max_col=len(SETUP_COLUMNS) + 1)
+    header = next(data, ())
+    if tuple(cell.value for cell in header[:len(SETUP_COLUMNS)]) != SETUP_COLUMNS or header[-1].value is not None:
+        raise ValidationError("The Setup sheet headers must match the Intern Master template.")
+    result = []
+    for number, cells in enumerate(data, 2):
+        if number > MAX_ROWS + 1:
+            raise ValidationError(f"Limit the Setup sheet to {MAX_ROWS} rows.")
+        if all(cell.value is None for cell in cells):
+            continue
+        if cells[-1].value is not None or any(cell.data_type in ("f", "e") for cell in cells):
+            raise ValidationError(f"Setup row {number}: use plain values without extra columns.")
+        values = {name: str(cell.value or "").strip()[:200] for name, cell in zip(SETUP_COLUMNS, cells)}
+        result.append({"number": number, **values})
+    if not result:
+        raise ValidationError("Add records to the Setup sheet or turn off the setup option.")
+    return result
+
+
+def reference_record(model, message, **filters):
+    try:
+        return model.objects.get(**filters)
+    except model.DoesNotExist:
+        raise ValidationError(message) from None
+    except model.MultipleObjectsReturned:
+        raise ValidationError("More than one matching code exists. Use Program setup to resolve the duplicate.") from None
+
+
+def optional_record(model, **filters):
+    try:
+        return model.objects.get(**filters)
+    except model.DoesNotExist:
+        return None
+
+
+def create_setup_records(rows):
+    changes = []
+    for row in rows:
+        code, domain_code, team_code = (row[key].upper() for key in ("internship_batch", "domain", "team"))
+        try:
+            if not all(row[key] for key in ("internship_batch", "batch_name", "domain", "domain_name", "team", "team_name")):
+                raise ValidationError("Complete the batch, domain, and team codes and names.")
+            prefix = row["local_dit_prefix"]
+            batch = optional_record(m.Cohort, code__iexact=code)
+            if batch is None:
+                batch = s.save_checked(m.Cohort(code=code, name=row["batch_name"], id_prefix=prefix))
+                id_policy = f"local DIT ID prefix {prefix}" if prefix else "official DIT IDs only"
+                changes.append(f"Internship batch {code} ({id_policy})")
+            elif prefix and prefix != batch.id_prefix:
+                raise ValidationError(f"Internship batch {code} already has different DIT ID settings. Review Program setup.")
+            domain = optional_record(m.Domain, code__iexact=domain_code)
+            if domain is None:
+                domain = s.save_checked(m.Domain(code=domain_code, name=row["domain_name"]))
+                changes.append(f"Domain {domain_code}")
+            if not domain.cohorts.filter(pk=batch.pk).exists():
+                domain.cohorts.add(batch)
+                changes.append(f"Domain {domain_code} enabled for {code}")
+            team = optional_record(m.Team, cohort=batch, code__iexact=team_code)
+            if team is None:
+                s.save_checked(m.Team(cohort=batch, domain=domain, code=team_code, name=row["team_name"]))
+                changes.append(f"Team {team_code}")
+            elif team.domain_id != domain.pk:
+                raise ValidationError(f"Team {team_code} is already assigned to a different domain.")
+        except (ValidationError, IntegrityError, MultipleObjectsReturned) as exc:
+            message = " ".join(exc.messages) if isinstance(exc, ValidationError) else "A matching setup code conflicts with an existing record."
+            raise ValidationError(f"Setup row {row['number']}: {message}") from None
+    return changes
 
 
 def date_value(value):
@@ -180,14 +267,16 @@ def rubric_by_label(value):
 
 
 def find_domain(value):
-    return m.Domain.objects.get(code__iexact=value) if value else None
+    return reference_record(m.Domain, f"Domain code {value} is not configured.", code__iexact=value) if value else None
 
 
 def handle_row(batch, row, artifacts, dry_run):
     actor, kind = batch.actor, batch.kind
     if kind == "roster":
-        cohort = m.Cohort.objects.get(code__iexact=row["cohort"])
-        team = m.Team.objects.get(cohort=cohort, code__iexact=row["team"]) if row["team"] else None
+        cohort = reference_record(m.Cohort, f"Internship batch code {row['cohort'] or '(blank)'} is not configured.",
+                                  code__iexact=row["cohort"])
+        team = reference_record(m.Team, f"Team code {row['team']} is not configured for internship batch {cohort.code}.",
+                                cohort=cohort, code__iexact=row["team"]) if row["team"] else None
         mode = row["mode"].lower() or "manual"
         if mode not in ("manual", "auto"):
             raise ValidationError("Domain allocation mode must be manual or auto.")
@@ -252,6 +341,14 @@ def apply_batch(batch, dry_run=True):
         return []
     files = {item.name.casefold(): item for item in batch.artifacts.all()}
     output, seen = [], set()
+    if batch.kind == "roster" and batch.setup_rows:
+        try:
+            with transaction.atomic():
+                changes = create_setup_records(batch.setup_rows)
+        except ValidationError as exc:
+            return [{"number": "Setup", "reference": "Program setup", "error": " ".join(exc.messages), "detail": ""}]
+        if changes:
+            output.append({"number": "Setup", "reference": "Program setup", "error": "", "detail": ", ".join(changes)})
     for row in batch.rows:
         key = tuple(row[field].lower() for field in KEYS[batch.kind])
         error = ""
@@ -278,7 +375,7 @@ def apply_batch(batch, dry_run=True):
     else:
         batch.committed_at = timezone.now()
         batch.save(update_fields=["committed_at"])
-        s.audit(batch.actor, "import.committed", batch.kind, f"{len(output)} rows")
+        s.audit(batch.actor, "import.committed", batch.kind, f"{len(batch.rows)} rows")
     return output
 
 

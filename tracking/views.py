@@ -120,7 +120,7 @@ def setup_record(request, kind):
             return redirect("rubric", pk=item.pk) if kind == "rubric" else redirect(back)
         except IntegrityError as exc:
             form_error(form, exc)
-    return render_form(request, form, title, reverse(back), "Create record")
+    return render_form(request, form, title, reverse(back), "Create record", form_grid=True)
 
 
 @coordinator_required
@@ -142,7 +142,8 @@ def new_intern(request):
         except (ValidationError, IntegrityError) as exc:
             form_error(form, exc)
     return render_form(request, form, "Register an intern", reverse("roster"), "Register intern",
-                       description="Add the intern’s email address to send their username and temporary password.")
+                       description="Add the intern’s email address to send their username and temporary password.",
+                       form_grid=True)
 
 
 @coordinator_required
@@ -167,7 +168,7 @@ def edit_intern(request, pk):
             urlsafe_base64_encode(force_bytes(user.pk)), default_token_generator.make_token(user),
         ]))
     return render_form(request, form, "Edit intern", reverse("roster"), invite=invite,
-                       description=f"{enrollment.intern.dit_id} · {enrollment.cohort}")
+                       description=f"{enrollment.intern.dit_id} · {enrollment.cohort}", form_grid=True)
 
 
 @never_cache
@@ -251,7 +252,7 @@ def assignment_form(request, pk=None):
             return redirect("task", pk=item.pk)
         except (ValidationError, IntegrityError) as exc:
             form_error(form, exc)
-    return render_form(request, form, "Edit assignment" if pk else "Assign a task", reverse("tasks"))
+    return render_form(request, form, "Edit assignment" if pk else "Assign a task", reverse("tasks"), form_grid=True)
 
 
 @login_required
@@ -511,7 +512,7 @@ def new_batch(request, kind):
         try:
             if not upload:
                 raise ValidationError("Choose the completed Excel workbook.")
-            rows = w.parse(upload, kind)
+            rows, setup_rows = w.parse(upload, kind, include_setup=kind == "roster" and request.POST.get("include_setup") == "1")
             artifacts = request.FILES.getlist("artifacts") if kind == "submissions" else []
             if len(artifacts) > 50 or sum(file.size for file in artifacts) > 50 * 1024 * 1024:
                 raise ValidationError("Attach up to 50 files and 50 MB per batch.")
@@ -524,7 +525,8 @@ def new_batch(request, kind):
                     raise ValidationError("Each attached file must have a unique filename listed in the workbook.")
                 filenames.add(key)
             with transaction.atomic():
-                batch = m.ImportBatch.objects.create(actor=request.user, kind=kind, rows=rows, filename=upload.name)
+                batch = m.ImportBatch.objects.create(actor=request.user, kind=kind, rows=rows,
+                                                     setup_rows=setup_rows, filename=upload.name)
                 for file in artifacts:
                     item = m.StagedArtifact(batch=batch, name=file.name)
                     item.file.save(file.name, file, save=False)
@@ -601,7 +603,7 @@ def edit_team(request, pk):
             return redirect("team_detail", pk=pk)
         except IntegrityError as exc:
             form_error(form, exc)
-    return render_form(request, form, "Edit team", reverse("team_detail", args=[pk]))
+    return render_form(request, form, "Edit team", reverse("team_detail", args=[pk]), form_grid=True)
 
 
 @coordinator_required
@@ -731,14 +733,16 @@ def export(request, kind):
                                   counts["percent"]) for team, counts in r.by_team(items)])
             w.style(summary)
     metadata = book.create_sheet("Details")
-    w.add_rows(metadata, [("Report", kind), ("Generated", timezone.localtime().isoformat())] +
-               [(key, request.GET.get(key, "")[:160]) for key in
+    report_name = "Intern Master" if kind == "roster" else kind
+    w.add_rows(metadata, [("Report", report_name), ("Generated", timezone.localtime().isoformat())] +
+               [("Internship batch" if key == "cohort" else key, request.GET.get(key, "")[:160]) for key in
                 ("cohort", "team", "domain", "q", "college", "state", "task_status", "assessment_status",
                  "date_on", "date_from", "date_to", "sort")])
     w.style(metadata)
     w.style(sheet)
     s.audit(request.user, "report.exported", kind)
-    return w.workbook_response(book, f"{kind}-{timezone.localdate()}.xlsx")
+    filename = "intern-master" if kind == "roster" else kind
+    return w.workbook_response(book, f"{filename}-{timezone.localdate()}.xlsx")
 
 
 @login_required

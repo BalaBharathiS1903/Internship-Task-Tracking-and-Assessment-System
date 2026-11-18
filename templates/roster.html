@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Intern master{% endblock %}
-{% block crumb %}Intern master{% endblock %}
+{% block title %}Intern Master{% endblock %}
+{% block crumb %}Intern Master{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Intern master</h1><p>Manage official DIT IDs, domains, team memberships, and account activation.</p></div><div class="actions"><a class="button primary" href="{% url 'new_intern' %}">＋ Register intern</a><a class="button secondary" href="{% url 'new_batch' 'roster' %}">Import roster</a></div></div>
+<div class="page-heading"><div><h1>Intern Master</h1><p>Manage official DIT IDs, domains, team memberships, and account activation.</p></div><div class="actions"><a class="button primary" href="{% url 'new_intern' %}">＋ Register intern</a><a class="button secondary" href="{% url 'new_batch' 'roster' %}">Import interns</a></div></div>
 <form class="panel filter-panel" method="get" aria-label="Intern filters">
   <div class="filter-row roster-filters">
     <label>Search by name, DIT ID, or email<input type="search" placeholder="e.g. DIT2026004 or Priya" name="q" value="{{ request.GET.q }}"></label>

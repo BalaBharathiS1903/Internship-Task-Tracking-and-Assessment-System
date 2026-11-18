@@ -16,11 +16,11 @@ Open [Internship Desk](http://127.0.0.1:8000/) and sign in to set up internship 
 
 ## Main workflows
 
-1. **Onboard.** Enter approved intern records manually or download the prebuilt roster template from Upload Center. Use manual domain selection or automated matching from a preference and the selected team's domain. Use a batch ID prefix only when authorized to issue DIT IDs locally.
+1. **Onboard.** Enter approved intern records manually or download the Intern Master template from Upload Center. Use manual domain selection or automated matching from a preference and the selected team's domain. When a workbook includes new batches, domains, or teams, complete the Setup sheet and enable setup at upload. Use a batch ID prefix only when authorized to issue DIT IDs locally.
 2. **Assign.** Publish a scoring guide with weights totaling 100%. Assign tasks individually or use the task register workbook.
 3. **Submit.** Interns sign in and provide an HTTPS link or a project file. The personal submission manifest supports multiple assignments and file attachments. The server derives the DIT ID from the authenticated account.
 4. **Assess.** The coordinator reviews evidence, enters scores or imports the score workbook, checks criterion feedback, and publishes Passed or Needs revision. A revision opens another submission cycle with its own deadline.
-5. **Monitor.** Team Leads use the same intern account and their read-only Team workspace. Messages go to the selected teammate's inbox. The coordinator manages attendance and exports team follow-ups, task registers, roster, attendance, and released results.
+5. **Monitor.** Team Leads use the same intern account and their read-only Team workspace. Messages go to the selected teammate's inbox. The coordinator manages attendance and exports team follow-ups, task registers, Intern Master, attendance, and released results.
 
 Every workbook includes an example and version metadata. Fill its Data sheet and confirm the preview to commit changes. When a row fails, download its error report, correct the source workbook, and upload again.
 
