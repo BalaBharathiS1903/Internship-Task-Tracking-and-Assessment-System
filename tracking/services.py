@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import URLValidator
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
 
 from . import models as m
@@ -30,19 +31,38 @@ def allow_coordinator(actor):
         raise PermissionDenied
 
 
+def allocate_team(actor, cohort, domain):
+    teams = m.Team.objects.filter(cohort=cohort)
+    team = teams.filter(domain=domain).annotate(member_count=Count("enrollment")).order_by("member_count", "code", "pk").first()
+    if team:
+        return team
+    code = domain.code.upper()
+    sequence = 1
+    while teams.filter(code__iexact=code).exists():
+        sequence += 1
+        suffix = f"-{sequence}"
+        code = f"{domain.code[:24 - len(suffix)].upper()}{suffix}"
+    team = save_checked(m.Team(cohort=cohort, domain=domain, code=code, name=domain.name))
+    audit(actor, "team.auto_created", team.pk)
+    return team
+
+
 @transaction.atomic
 def register_intern(actor, *, reference, name, cohort, dit_id="", email="", domain=None,
-                    preferred_domain=None, team=None, mode="manual", notify=True):
+                    preferred_domain=None, team=None, mode="manual", college="", phone="",
+                    placement_role="", joined_on=None, notify=True):
     allow_coordinator(actor)
     reference = reference.strip().upper()
     cohort = m.Cohort.objects.select_for_update().get(pk=cohort.pk)
     if mode == "auto":
-        suggestions = {item.pk: item for item in (preferred_domain, team.domain if team else None) if item}
+        suggestions = {item.pk: item for item in (domain, preferred_domain, team.domain if team else None) if item}
         if len(suggestions) != 1:
             raise ValidationError("Automatic domain matching requires one consistent preference or team domain. Choose a domain manually to resolve it.")
         domain = next(iter(suggestions.values()))
     if domain is None:
         raise ValidationError("Select a domain in manual mode.")
+    if not cohort.domains.filter(pk=domain.pk).exists():
+        raise ValidationError("Select a domain enabled for this internship batch.")
     if m.Intern.objects.filter(reference=reference).exists():
         raise ValidationError("This intern reference already exists. Open the intern’s profile to make changes.")
     if not name.strip():
@@ -62,7 +82,11 @@ def register_intern(actor, *, reference, name, cohort, dit_id="", email="", doma
     user = get_user_model()(username=f"intern-{reference.lower().replace('/', '-')}", first_name=first, last_name=last, email=email)
     user.set_unusable_password()
     save_checked(user)
-    intern = save_checked(m.Intern(user=user, reference=reference, dit_id=dit_id))
+    intern = save_checked(m.Intern(user=user, reference=reference, dit_id=dit_id,
+                                  college=" ".join(college.split()), phone=phone, placement_role=placement_role,
+                                  joined_on=joined_on))
+    if mode == "auto" and not team:
+        team = allocate_team(actor, cohort, domain)
     enrollment = save_checked(m.Enrollment(
         intern=intern, cohort=cohort, domain=domain, preferred_domain=preferred_domain, team=team,
     ))
@@ -73,7 +97,8 @@ def register_intern(actor, *, reference, name, cohort, dit_id="", email="", doma
 
 
 @transaction.atomic
-def update_enrollment(actor, enrollment, *, name, email, domain, team, is_lead, reason):
+def update_enrollment(actor, enrollment, *, name, email, domain, team, is_lead, reason,
+                      college=None, phone="", placement_role="", joined_on=None):
     allow_coordinator(actor)
     m.Cohort.objects.select_for_update().get(pk=enrollment.cohort_id)
     enrollment = m.Enrollment.objects.select_related("intern__user").get(pk=enrollment.pk)
@@ -92,6 +117,11 @@ def update_enrollment(actor, enrollment, *, name, email, domain, team, is_lead, 
     user.first_name, _, user.last_name = name.strip().partition(" ")
     user.email = email
     save_checked(user)
+    if college is not None:
+        intern = enrollment.intern
+        intern.college = " ".join(college.split())
+        intern.phone, intern.placement_role, intern.joined_on = phone, placement_role, joined_on
+        save_checked(intern)
     if previous_email != email and (enrollment.intern.must_change_password or not user.has_usable_password()):
         if email:
             notifications.queue_welcome(enrollment.intern)

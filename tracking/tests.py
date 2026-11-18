@@ -102,6 +102,14 @@ class Workflows(TestCase):
         for kind in ("roster", "allocation", "tasks", "completed", "follow-up", "overdue", "assessment", "team-lead"):
             workbook = self.download("export", kind)
             self.assertIn("Report", workbook)
+            detail = workbook["Members"] if kind == "team-lead" else workbook["Report"]
+            self.assertIn("College", [cell.value for cell in detail[1]])
+        for kind in ("roster", "allocation", "tasks", "attendance", "team-lead"):
+            workbook = self.download("export", kind, query={"college": "Campus One"})
+            detail = workbook["Members"] if kind == "team-lead" else workbook["Report"]
+            headers, *rows = detail.values
+            self.assertTrue(rows)
+            self.assertEqual({row[headers.index("College")] for row in rows}, {"Campus One"})
         self.assertContains(self.client.get(reverse("team_report", args=[self.member.team_id])), "Print report")
 
     def test_team_management_permissions_and_protected_deletion(self):
@@ -120,9 +128,15 @@ class Workflows(TestCase):
         response = self.client.post(reverse("new_intern"), {
             "reference": "EMAIL-01", "name": "New Intern", "email": "new@example.invalid",
             "dit_id": "DIT-EMAIL-01", "cohort": self.member.cohort_id, "domain": self.member.domain_id,
-            "team": self.member.team_id, "mode": "manual",
+            "team": self.member.team_id, "mode": "manual", "college": "Example College", "phone": "0123456789",
+            "placement_role": "Developer Intern", "joined_on": "2026-11-10",
         })
         self.assertEqual(response.status_code, 302)
+        registered = m.Intern.objects.get(dit_key="DIT-EMAIL-01")
+        self.assertEqual(registered.college, "Example College")
+        self.assertEqual(registered.phone, "0123456789")
+        self.assertEqual(registered.placement_role, "Developer Intern")
+        self.assertEqual(registered.joined_on.isoformat(), "2026-11-10")
         notice = m.EmailNotification.objects.get(kind="welcome")
         password = temporary_password(notice)
         self.assertNotEqual(notice.user.password, password)
@@ -141,14 +155,28 @@ class Workflows(TestCase):
         self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
         self.assertFalse(m.Intern.objects.get(user=notice.user).must_change_password)
 
+    def test_intern_details_can_be_updated_and_viewed_on_the_own_profile(self):
+        self.client.force_login(self.coordinator)
+        response = self.client.post(reverse("edit_intern", args=[self.member.pk]), {
+            "name": self.intern.get_full_name(), "email": self.intern.email, "college": "Campus  One",
+            "phone": "0001234", "placement_role": "Developer Intern", "joined_on": "2026-11-10",
+            "domain": self.member.domain_id, "team": self.member.team_id, "reason": "Verified details",
+        })
+        self.assertRedirects(response, reverse("roster"))
+        self.client.force_login(self.intern)
+        profile = self.client.get(reverse("profile"))
+        for value in ("Campus One", "0001234", "Developer Intern", "10 Nov 2026"):
+            self.assertContains(profile, value)
+        self.client.force_login(self.lead)
+        self.assertNotContains(self.client.get(reverse("team")), "Campus One")
+
     @override_settings(DIT_EMAIL_TRANSPORT="django", DIT_EMAIL_FROM="internships@example.invalid",
                        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend", DIT_MAIL_BACKGROUND=False)
     def test_import_confirmation_sends_welcome_and_task_email_to_the_assigned_intern(self):
         self.client.force_login(self.coordinator)
         roster = self.download("template", "roster")
-        roster["Data"].append(("MAIL-02", "Import Intern", "import@example.invalid",
-                               self.member.cohort.code, "DIT-EMAIL-02", "manual",
-                               self.member.domain.code, "", self.member.team.code))
+        roster["Data"].append(("MAIL-02", "Import Intern", "import@example.invalid", "Example College", "", "", "",
+                               self.member.cohort.code, "DIT-EMAIL-02", self.member.domain.code))
         batch_url, _ = self.upload_batch("roster", roster)
         self.assertFalse(m.EmailNotification.objects.exists())
         self.assertEqual(self.client.post(batch_url).status_code, 302)
@@ -167,6 +195,7 @@ class Workflows(TestCase):
         self.assertEqual(message.to, ["import@example.invalid"])
         self.assertIn("Greetings from DefineInfoTech Pvt. Ltd.", message.body)
         self.assertIn("Submit the Python report and README.", message.body)
+        self.assertIn("Example College", message.subject)
         self.assertIn("Due on:", message.body)
 
     def test_settings_protects_other_coordinators_and_logs_activity(self):
@@ -213,7 +242,8 @@ class Workflows(TestCase):
         self.client.force_login(self.coordinator)
         book = self.download("template", "roster")
         self.assertIn("Desk_domain", book.defined_names)
-        book["Data"].append(("NEW-01", "Diya S", "", "DEMO-26", "00072", "auto", "", "DEMO-WEB", "WEB"))
+        book["Data"].append(("NEW-01", "Diya S", "", "Campus One", "001234", "Intern", "2026-11-10",
+                             "DEMO-26", "00072", "Web Development"))
         batch, preview = self.upload_batch("roster", book)
         self.assertContains(preview, "00072")
         self.assertFalse(m.Intern.objects.filter(dit_key="00072").exists())
@@ -221,24 +251,34 @@ class Workflows(TestCase):
         self.assertEqual(self.client.post(batch).status_code, 302)
         record = m.Intern.objects.get(dit_key="00072")
         self.assertEqual(record.dit_id, "00072")
+        self.assertEqual(record.college, "Campus One")
+        self.assertEqual(record.phone, "001234")
+        self.assertEqual(record.placement_role, "Intern")
+        self.assertEqual(record.joined_on.isoformat(), "2026-11-10")
         self.assertEqual(record.enrollments.get().domain.code, "DEMO-WEB")
+        self.assertEqual(record.enrollments.get().team_id, self.member.team_id)
 
     def test_roster_errors_block_whole_batch(self):
         self.client.force_login(self.coordinator)
         book = self.download("template", "roster")
-        book["Data"].append(("NEW-02", "Diya S", "", "DEMO-26", "DIT-72", "manual", "DEMO-WEB", "", "WEB"))
-        book["Data"].append(("NEW-03", "Neha S", "", "DEMO-26", "DIT-73", "auto", "", "DEMO-DATA", "WEB"))
+        book["Data"].append(("NEW-02", "Diya S", "", "Campus One", "", "", "", "DEMO-26", "DIT-72", "DEMO-WEB"))
+        book["Data"].append(("NEW-03", "Neha S", "", "", "", "", "", "DEMO-26", "DIT-73", "DEMO-DATA"))
+        book["Data"].append(("NEW-04", "Asha S", "", "Campus One", "", "", "", "DEMO-26", "DIT-74", "MISSING"))
         batch, preview = self.upload_batch("roster", book)
-        self.assertContains(preview, "one consistent preference")
+        self.assertContains(preview, "Enter the intern&#x27;s college.")
+        self.assertContains(preview, "Domain MISSING is not enabled for internship batch DEMO-26.")
         self.assertEqual(self.client.post(batch).status_code, 200)
-        self.assertFalse(m.Intern.objects.filter(reference__in=["NEW-02", "NEW-03"]).exists())
+        self.assertFalse(m.Intern.objects.filter(reference__in=["NEW-02", "NEW-03", "NEW-04"]).exists())
 
     def test_intern_master_setup_requires_opt_in_and_commits_with_the_interns(self):
         self.client.force_login(self.coordinator)
         book = self.download("template", "roster")
-        self.assertEqual(book["Data"]["D1"].value, "internship_batch")
-        book["Setup"].append(("2026", "Internship 2026", "DIT-26-", "WEB", "Web", "WEB-A", "Web A"))
-        book["Data"].append(("NEW-SETUP", "New Intern", "", "2026", "", "manual", "WEB", "", "WEB-A"))
+        self.assertEqual(book["Data"]["D1"].value, "college")
+        self.assertEqual(book["Data"]["H1"].value, "internship_batch")
+        self.assertNotIn("team", [cell.value for cell in book["Data"][1]])
+        self.assertNotIn("team", [cell.value for cell in book["Setup"][1]])
+        book["Setup"].append(("2026", "Internship 2026", "DIT-26-", "WEB", "Web"))
+        book["Data"].append(("NEW-SETUP", "New Intern", "", "Campus One", "", "", "", "2026", "", "WEB"))
 
         _, preview = self.upload_batch("roster", book)
         self.assertContains(preview, "Internship batch code 2026 is not configured.")
@@ -251,9 +291,29 @@ class Workflows(TestCase):
         self.assertEqual(self.client.post(batch).status_code, 302)
         enrollment = m.Enrollment.objects.get(intern__reference="NEW-SETUP")
         self.assertEqual(enrollment.cohort.code, "2026")
-        self.assertEqual(enrollment.team.code, "WEB-A")
+        self.assertEqual(enrollment.team.code, "WEB")
         self.assertEqual(enrollment.intern.dit_id, "DIT-26-0001")
         self.assertEqual(self.client.post(batch).status_code, 302)
+
+    def test_auto_allocation_balances_teams_in_each_batch_and_domain(self):
+        self.client.force_login(self.coordinator)
+        cohort = self.member.cohort
+        domain = m.Domain.objects.create(code="SECURITY", name="Security")
+        domain.cohorts.add(cohort)
+        first = m.Team.objects.create(cohort=cohort, domain=domain, code="SEC-A", name="Security A")
+        second = m.Team.objects.create(cohort=cohort, domain=domain, code="SEC-B", name="Security B")
+        book = self.download("template", "roster")
+        for number in range(1, 4):
+            book["Data"].append((f"SEC-{number}", "New Intern", "", "Campus One", "", "", "",
+                                 cohort.code, f"DIT-SEC-{number}", domain.code))
+        batch, preview = self.upload_batch("roster", book)
+        self.assertContains(preview, "Security A (SEC-A)", count=2)
+        self.assertContains(preview, "Security B (SEC-B)", count=1)
+        self.assertFalse(first.enrollment_set.exists())
+        self.assertFalse(second.enrollment_set.exists())
+        self.assertEqual(self.client.post(batch).status_code, 302)
+        self.assertEqual(first.enrollment_set.count(), 2)
+        self.assertEqual(second.enrollment_set.count(), 1)
 
     def test_coordinator_can_assign_manually_and_through_task_register(self):
         self.client.force_login(self.coordinator)

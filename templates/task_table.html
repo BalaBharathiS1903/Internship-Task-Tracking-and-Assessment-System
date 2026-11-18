@@ -1,10 +1,10 @@
 <div class="table-wrap"><table>
-  <thead><tr><th>Assignment</th>{% if coordinator %}<th>Intern</th><th>Team</th>{% endif %}{% if detailed %}<th>Assigned</th>{% endif %}<th>Deadline</th>{% if detailed %}<th>Submitted</th>{% endif %}<th>Status</th>{% if detailed %}<th>Assessment</th>{% endif %}<th><span class="sr-only">Open</span></th></tr></thead>
+  <thead><tr><th>Assignment</th>{% if coordinator %}<th>Intern</th><th>College</th><th>Team</th>{% endif %}{% if detailed %}<th>Assigned</th>{% endif %}<th>Deadline</th>{% if detailed %}<th>Submitted</th>{% endif %}<th>Status</th>{% if detailed %}<th>Assessment</th>{% endif %}<th><span class="sr-only">Open</span></th></tr></thead>
   <tbody>
   {% for item in items %}
     <tr>
       <td><a class="row-title" href="{% url 'task' item.assignment.pk %}">{{ item.assignment.title }}</a><small>{{ item.assignment.reference }}</small></td>
-      {% if coordinator %}<td>{{ item.assignment.enrollment.intern.user.get_full_name }}<small>{{ item.assignment.enrollment.intern.dit_id }}</small></td><td>{{ item.assignment.team.name }}</td>{% endif %}
+      {% if coordinator %}<td>{{ item.assignment.enrollment.intern.user.get_full_name }}<small>{{ item.assignment.enrollment.intern.dit_id }}</small></td><td>{{ item.assignment.enrollment.intern.college|default:"—" }}</td><td>{{ item.assignment.team.name }}</td>{% endif %}
       {% if detailed %}<td>{{ item.assignment.assigned_date|date:"j M Y" }}</td>{% endif %}
       <td>{{ item.deadline|date:"j M Y" }}</td>
       {% if detailed %}<td>{{ item.submission.submitted_at|date:"j M Y"|default:"—" }}</td>{% endif %}
@@ -12,6 +12,6 @@
       {% if detailed %}<td>{{ item.assessment_status }}{% if item.published %}<small>{{ item.published.total }} / 100</small>{% endif %}</td>{% endif %}
       <td><a href="{% url 'task' item.assignment.pk %}" aria-label="Open {{ item.assignment.reference }}">→</a></td>
     </tr>
-  {% empty %}<tr><td colspan="{% if detailed %}9{% elif coordinator %}6{% else %}4{% endif %}" class="empty">No assignments match this view.</td></tr>{% endfor %}
+  {% empty %}<tr><td colspan="{% if detailed %}10{% elif coordinator %}7{% else %}4{% endif %}" class="empty">No assignments match this view.</td></tr>{% endfor %}
   </tbody>
 </table></div>

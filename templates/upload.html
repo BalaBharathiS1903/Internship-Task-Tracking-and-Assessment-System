@@ -7,7 +7,7 @@
 <div class="page-heading"><div><h1>Upload {{ label }}</h1><p>Use the current template and review the validation results before committing.</p></div><a class="button secondary" href="{% url 'template' kind %}">↓ Template</a></div>
 <section class="panel padded"><form method="post" enctype="multipart/form-data" class="stack">{% csrf_token %}
 <label>Completed Excel workbook<input type="file" name="workbook" accept=".xlsx" required><small>Up to 500 rows and 5 MB.</small></label>
-{% if kind == 'roster' %}<label class="check-control"><input type="checkbox" name="include_setup" value="1"><span>Create missing setup records<small>Uses the Setup sheet for internship batches, domains, and teams. Review the proposed records and local DIT ID prefix before committing.</small></span></label>{% endif %}
+{% if kind == 'roster' %}<p>Fill in College and Domain for each intern. The preview shows the automatically assigned team and DIT ID.</p><label class="check-control"><input type="checkbox" name="include_setup" value="1"><span>Create missing setup records<small>Uses the Setup sheet for internship batches and domains. Review the proposed records and local DIT ID prefix before committing.</small></span></label>{% endif %}
 {% if kind == 'submissions' %}<label>Project files<input type="file" name="artifacts" multiple><small>Attach files whose names match the Artifact column. You can also use HTTPS links in the workbook.</small></label>{% endif %}
 <button class="button primary">Validate and preview →</button>
 </form></section>

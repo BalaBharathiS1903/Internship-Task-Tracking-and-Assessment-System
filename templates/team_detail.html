@@ -6,9 +6,9 @@
 <div class="page-heading"><div><h1>{{ record.name }}{% if printable %} · Team lead report{% endif %}</h1><p>{{ record.cohort }} · {{ record.domain }}</p>{% if record.description %}<p>{{ record.description }}</p>{% endif %}</div>
 <div class="actions print-hidden">{% if printable %}<button class="button primary" onclick="window.print()">Print report</button>{% else %}<a class="button secondary" href="{% url 'edit_team' record.pk %}">Edit team</a><a class="button primary" href="{% url 'team_report' record.pk %}">Open report</a>{% endif %}</div></div>
 {% include "stats.html" %}
-<section class="panel"><div class="panel-heading"><h2>Members ({{ summary.members }})</h2></div><div class="table-wrap"><table><thead><tr><th>Intern</th><th>DIT ID</th><th>Role</th></tr></thead><tbody>
-{% for member in members %}<tr><td>{{ member.intern.user.get_full_name }}</td><td>{{ member.intern.dit_id }}</td><td>{% if member.is_lead %}Team Lead{% else %}Member{% endif %}</td></tr>
-{% empty %}<tr><td class="empty" colspan="3">No interns assigned to this team.</td></tr>{% endfor %}
+<section class="panel"><div class="panel-heading"><h2>Members ({{ summary.members }})</h2></div><div class="table-wrap"><table><thead><tr><th>Intern</th><th>DIT ID</th><th>College</th><th>Role</th></tr></thead><tbody>
+{% for member in members %}<tr><td>{{ member.intern.user.get_full_name }}</td><td>{{ member.intern.dit_id }}</td><td>{{ member.intern.college|default:"—" }}</td><td>{% if member.is_lead %}Team Lead{% else %}Member{% endif %}</td></tr>
+{% empty %}<tr><td class="empty" colspan="4">No interns assigned to this team.</td></tr>{% endfor %}
 </tbody></table></div></section>
 <section class="panel"><div class="panel-heading"><h2>Assignments</h2></div>{% include "task_table.html" %}</section>
 {% endblock %}

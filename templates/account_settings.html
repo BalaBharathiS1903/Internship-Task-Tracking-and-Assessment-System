@@ -22,10 +22,10 @@
   {% if coordinator %}
   <section class="panel settings-management">
     <div class="panel-heading"><h2>User management</h2></div>
-    <div class="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Team</th><th>Status</th><th>Actions</th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>College</th><th>Team</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>{% for entry in accounts %}
       <tr><td><strong>{{ entry.user.get_full_name|default:entry.user.username }}</strong><small>{{ entry.user.username }}</small></td>
-      <td>{{ entry.role }}</td><td>{{ entry.teams|join:", "|default:"—" }}</td>
+      <td>{{ entry.role }}</td><td>{{ entry.user.intern.college|default:"—" }}</td><td>{{ entry.teams|join:", "|default:"—" }}</td>
       <td><span class="badge {% if entry.user.is_active %}green{% else %}muted{% endif %}">{{ entry.user.is_active|yesno:"Active,Inactive" }}</span></td>
       <td>
         {% if entry.manageable %}<div class="actions table-actions">

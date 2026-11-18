@@ -5,7 +5,7 @@
 <a class="text-link back" href="{% url 'attendance' %}">← Attendance</a>
 <div class="page-heading"><div><h1>{{ session.reference }}</h1><p>{{ session.team }} · {{ session.date|date:"j M Y" }} · {{ session.closed|yesno:"Closed,Open" }}</p></div>{% if not session.closed %}<form method="post">{% csrf_token %}<button class="button secondary" name="action" value="close">Close session</button></form>{% endif %}</div>
 <div class="detail-grid">
-<section class="panel"><div class="panel-heading"><h2>Session participants</h2></div><div class="table-wrap"><table><thead><tr><th>Intern</th><th>Attendance</th></tr></thead><tbody>{% for member, mark in marks %}<tr><td>{{ member.intern }}</td><td>{% if mark %}{{ mark.get_status_display }}{% else %}Unmarked{% endif %}</td></tr>{% empty %}<tr><td colspan="2" class="empty">No members in this team.</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="panel"><div class="panel-heading"><h2>Session participants</h2></div><div class="table-wrap"><table><thead><tr><th>Intern</th><th>College</th><th>Attendance</th></tr></thead><tbody>{% for member, mark in marks %}<tr><td>{{ member.intern }}</td><td>{{ member.intern.college|default:"—" }}</td><td>{% if mark %}{{ mark.get_status_display }}{% else %}Unmarked{% endif %}</td></tr>{% empty %}<tr><td colspan="3" class="empty">No members in this team.</td></tr>{% endfor %}</tbody></table></div></section>
 <section class="panel padded"><h2>Record a mark</h2><form class="stack" method="post">{% csrf_token %}{{ form.as_p }}<button class="button primary">Save attendance</button></form></section>
 </div>
 {% endblock %}

@@ -11,22 +11,29 @@ class DateInput(forms.DateInput):
         super().__init__(format="%Y-%m-%d")
 
 
-class RosterForm(forms.Form):
-    reference = forms.CharField(max_length=40, label="Intern reference")
+class InternDetailsForm(forms.Form):
     name = forms.CharField(max_length=150, label="Full name")
     email = forms.EmailField(required=False)
+    college = forms.CharField(max_length=160)
+    phone = forms.CharField(max_length=32, required=False, widget=forms.TextInput(attrs={"type": "tel"}))
+    placement_role = forms.CharField(max_length=100, required=False)
+    joined_on = forms.DateField(label="Joining date", widget=DateInput(), required=False)
+
+
+class RosterForm(InternDetailsForm):
+    field_order = ["reference", "name", "email", "college", "phone", "placement_role", "joined_on"]
+    reference = forms.CharField(max_length=40, label="Intern reference")
     dit_id = forms.CharField(max_length=40, required=False, label="Official DIT ID",
                              help_text="Leave blank only if this batch authorizes local issuance.")
     cohort = forms.ModelChoiceField(label="Internship batch", queryset=m.Cohort.objects.order_by("name"))
-    mode = forms.ChoiceField(label="Domain allocation", choices=[("manual", "Manual selection"), ("auto", "Automatic matching")])
+    mode = forms.ChoiceField(label="Domain allocation", choices=[("manual", "Manual selection"), ("auto", "Automatic matching")],
+                             help_text="Automatic matching assigns a team in the selected domain when no team is chosen.")
     domain = forms.ModelChoiceField(queryset=m.Domain.objects.order_by("name"), required=False)
     preferred_domain = forms.ModelChoiceField(queryset=m.Domain.objects.order_by("name"), required=False)
     team = forms.ModelChoiceField(queryset=m.Team.objects.order_by("name"), required=False)
 
 
-class EnrollmentForm(forms.Form):
-    name = forms.CharField(max_length=150, label="Full name")
-    email = forms.EmailField(required=False)
+class EnrollmentForm(InternDetailsForm):
     domain = forms.ModelChoiceField(queryset=m.Domain.objects.none())
     team = forms.ModelChoiceField(queryset=m.Team.objects.none(), required=False)
     is_lead = forms.BooleanField(label="Designate as Team Lead", required=False)

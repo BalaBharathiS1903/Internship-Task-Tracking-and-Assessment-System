@@ -86,16 +86,17 @@ def by_team(items):
     return [(team, totals(team_rows)) for team, team_rows in teams.values()]
 
 
-def team_summaries(teams, items):
+def team_summaries(teams, items, *, college=""):
     totals_by_id = {team.pk: counts for team, counts in by_team(items)}
     summaries = {team.pk: {"team": team, "counts": totals_by_id.get(team.pk, totals([])),
                            "members": 0, "leader": None} for team in teams}
     for enrollment in m.Enrollment.objects.filter(team_id__in=summaries).select_related("intern__user"):
         summary = summaries[enrollment.team_id]
-        summary["members"] += 1
+        if not college or enrollment.intern.college == college:
+            summary["members"] += 1
         if enrollment.is_lead:
             summary["leader"] = enrollment.intern
-    return list(summaries.values())
+    return [summary for summary in summaries.values() if not college or summary["members"] or summary["counts"]["total"]]
 
 
 def attendance_summary(entries):
