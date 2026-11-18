@@ -1,9 +1,13 @@
 from django.urls import path
 
 from . import views as v
+from . import account_views as accounts
 
 urlpatterns = [
     path("", v.dashboard, name="dashboard"),
+    path("settings/", accounts.account_settings, name="account_settings"),
+    path("settings/users/<int:pk>/<slug:action>/", accounts.manage_user, name="manage_user"),
+    path("settings/email/send/", accounts.retry_notifications, name="retry_notifications"),
     path("registry/", v.registry, name="registry"),
     path("registry/<slug:kind>/new/", v.setup_record, name="setup"),
     path("interns/", v.roster, name="roster"),

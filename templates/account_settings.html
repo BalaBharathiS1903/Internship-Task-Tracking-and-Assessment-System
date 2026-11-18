@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block crumb %}Settings{% endblock %}
+{% block content %}
+<div class="page-heading"><h1>Settings</h1></div>
+{% if temporary_login %}<p class="alert">Choose a new password to finish setting up your account.</p>{% endif %}
+<div class="settings-grid">
+  <section class="panel padded">
+    <h2>My account</h2>
+    <dl class="account-details">
+      <div><dt>Name</dt><dd>{{ user.get_full_name|default:user.username }}</dd></div>
+      <div><dt>Username</dt><dd>{{ user.username }}</dd></div>
+      <div><dt>Role</dt><dd>{{ account_role }}</dd></div>
+    </dl>
+    <h3>Change password</h3>
+    <form method="post" class="stack">
+      {% csrf_token %}<input type="hidden" name="action" value="password">
+      {{ password_form.as_p }}
+      <button class="button primary">Update password</button>
+    </form>
+  </section>
+  {% if coordinator %}
+  <section class="panel settings-management">
+    <div class="panel-heading"><h2>User management</h2></div>
+    <div class="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Team</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>{% for entry in accounts %}
+      <tr><td><strong>{{ entry.user.get_full_name|default:entry.user.username }}</strong><small>{{ entry.user.username }}</small></td>
+      <td>{{ entry.role }}</td><td>{{ entry.teams|join:", "|default:"—" }}</td>
+      <td><span class="badge {% if entry.user.is_active %}green{% else %}muted{% endif %}">{{ entry.user.is_active|yesno:"Active,Inactive" }}</span></td>
+      <td>
+        {% if entry.manageable %}<div class="actions table-actions">
+          <a class="button secondary small icon-button" href="{% url 'manage_user' entry.user.pk 'password' %}" aria-label="Reset password for {{ entry.user.username }}" title="Reset password">{% include "icon.html" with name="key" only %}</a>
+          <form action="{% url 'manage_user' entry.user.pk 'status' %}" method="post">{% csrf_token %}<button class="button secondary small icon-button" aria-label="{% if entry.user.is_active %}Deactivate{% else %}Activate{% endif %} {{ entry.user.username }}" title="{{ entry.user.is_active|yesno:"Deactivate,Activate" }}">{% if entry.user.is_active %}{% include "icon.html" with name="pause" only %}{% else %}{% include "icon.html" with name="play" only %}{% endif %}</button></form>
+          <a class="button secondary small icon-button" href="{% url 'manage_user' entry.user.pk 'delete' %}" aria-label="Delete {{ entry.user.username }}" title="Delete account">{% include "icon.html" with name="delete" only %}</a>
+        </div>{% elif entry.user.pk == user.pk %}<small>You</small>{% else %}<small>—</small>{% endif %}
+      </td></tr>
+      {% endfor %}</tbody></table></div>
+      {% include "pagination.html" %}
+      <div class="padded settings-add">
+        <div class="split"><h3>Add user</h3><a class="button secondary small" href="{% url 'new_intern' %}">Register an intern</a></div>
+        {% if create_form %}<details {% if create_form.errors %}open{% endif %}>
+          <summary>Create a coordinator</summary>
+          <form class="stack" method="post">{% csrf_token %}<input type="hidden" name="action" value="add_coordinator">
+          {{ create_form.as_p }}<button class="button primary small">Create coordinator</button></form>
+        </details>{% endif %}
+        <details {% if lead_form.errors %}open{% endif %}>
+          <summary>Designate a Team Lead</summary>
+          <form class="stack" method="post">{% csrf_token %}<input type="hidden" name="action" value="designate_lead">
+          {{ lead_form.as_p }}<button class="button primary small">Assign Team Lead</button></form>
+        </details>
+      </div>
+  </section>
+  {% endif %}
+</div>
+{% if coordinator %}
+<section class="panel">
+  <div class="panel-heading"><div><h2>Email notifications</h2><p>{% if mail_enabled %}{{ queued }} pending notification{{ queued|pluralize }}.{% else %}Delivery setup is required. {{ queued }} pending notification{{ queued|pluralize }}.{% endif %}</p></div>
+    {% if mail_enabled and queued %}<form method="post" action="{% url 'retry_notifications' %}">{% csrf_token %}<button class="button secondary small">Send ready emails</button></form>{% endif %}
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>Queued</th><th>Type</th><th>Recipient</th><th>Status</th></tr></thead><tbody>
+  {% for notice in notices %}<tr><td>{{ notice.created_at|date:"j M Y, H:i" }}</td><td>{{ notice.get_kind_display }}</td><td>{{ notice.recipient }}</td><td>{% if notice.sent_at %}Sent{% elif notice.closed_at %}Cancelled{% elif notice.last_error %}Waiting to retry{% else %}Queued{% endif %}{% if notice.last_error %}<small>{{ notice.last_error }}</small>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="4" class="empty">No email notifications yet.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+<section class="panel">
+  <div class="panel-heading"><h2>Recent activity</h2><small>Last 60 events</small></div>
+  <div class="table-wrap"><table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Record</th><th>Details</th></tr></thead><tbody>
+  {% for event in recent %}<tr><td>{{ event.created_at|date:"j M Y, H:i" }}</td><td>{{ event.actor.username|default:"System" }}</td><td>{{ event.verb }}</td><td>{{ event.target }}</td><td>{{ event.detail|default:"—" }}</td></tr>
+  {% empty %}<tr><td colspan="5" class="empty">No activity yet.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endif %}
+{% endblock %}

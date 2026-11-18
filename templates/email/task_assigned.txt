@@ -1,0 +1,21 @@
+{% autoescape off %}Dear {{ name }},
+
+Greetings from DefineInfoTech Pvt. Ltd. (DIT).
+
+You have been assigned the following task for your internship.
+
+Task: {{ assignment.task_code }} – {{ assignment.title }}
+Assignment reference: {{ assignment.reference }}
+Team: {{ assignment.team.name }}
+Assigned on: {{ assigned }}
+Due on: {{ due }} (India time)
+{% if assignment.instructions %}
+Task instructions and deliverables:
+{{ assignment.instructions }}
+{% endif %}
+Open the assignment to review the requirements and submit your work: {{ assignment_url }}
+
+Regards,
+HRD / Internship Coordination Team
+DefineInfoTech Pvt. Ltd. (DIT)
+We Define Intellect{% endautoescape %}

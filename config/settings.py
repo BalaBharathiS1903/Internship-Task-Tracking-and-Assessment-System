@@ -31,6 +31,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "tracking.middleware.RequireInternPasswordChange",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -106,3 +107,9 @@ SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
+
+DIT_PUBLIC_URL = os.environ.get("DIT_PUBLIC_URL") or (f"https://{RENDER_HOSTNAME}" if RENDER_HOSTNAME else "http://127.0.0.1:8000")
+DIT_EMAIL_FROM = os.environ.get("DIT_EMAIL_FROM", "")
+DIT_RESEND_API_KEY = os.environ.get("DIT_RESEND_API_KEY", "")
+DIT_EMAIL_TRANSPORT = os.environ.get("DIT_EMAIL_TRANSPORT", "resend")
+DIT_MAIL_BACKGROUND = True

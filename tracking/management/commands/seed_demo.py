@@ -87,7 +87,7 @@ class Command(BaseCommand):
             team = teams[team_index]
             enrollment = s.register_intern(
                 coordinator, reference=f"DEMO-{code}", name=name, cohort=cohort, team=team,
-                domain=team.domain, email=f"{code.lower()}@example.invalid",
+                domain=team.domain, email=f"{code.lower()}@example.invalid", notify=False,
             )
             user = enrollment.intern.user
             if index == 0:
@@ -109,7 +109,7 @@ class Command(BaseCommand):
                     task_code=f"{team.code}-{offset + 1}", title=title, rubric=rubric,
                     assigned_date=today - timedelta(days=8),
                     due_date=today + timedelta(days=(-2, 4, 7, -1, 2, 8, 3)[index] + offset),
-                    instructions="Attach a file or share an HTTPS link. Include a short note explaining how to review your work.",
+                    instructions="Attach a file or share an HTTPS link. Include a short note explaining how to review your work.", notify=False,
                 )
                 if offset == 0 and index in (0, 2, 3, 5, 6):
                     submission = s.submit(user, assignment.pk, link="https://example.invalid/demo-work", note="Synthetic project evidence")

@@ -8,6 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import models as m
+from . import notifications
 from .access import intern_profile, is_coordinator
 
 FILE_EXTENSIONS = {".pdf", ".zip", ".docx", ".xlsx", ".pptx", ".png", ".jpg", ".jpeg", ".txt", ".csv"}
@@ -31,7 +32,7 @@ def allow_coordinator(actor):
 
 @transaction.atomic
 def register_intern(actor, *, reference, name, cohort, dit_id="", email="", domain=None,
-                    preferred_domain=None, team=None, mode="manual"):
+                    preferred_domain=None, team=None, mode="manual", notify=True):
     allow_coordinator(actor)
     reference = reference.strip().upper()
     cohort = m.Cohort.objects.select_for_update().get(pk=cohort.pk)
@@ -66,6 +67,8 @@ def register_intern(actor, *, reference, name, cohort, dit_id="", email="", doma
         intern=intern, cohort=cohort, domain=domain, preferred_domain=preferred_domain, team=team,
     ))
     audit(actor, "roster.created", reference, mode)
+    if notify:
+        notifications.queue_welcome(intern)
     return enrollment
 
 
@@ -85,15 +88,24 @@ def update_enrollment(actor, enrollment, *, name, email, domain, team, is_lead, 
     enrollment.team, enrollment.domain, enrollment.is_lead = team, domain, is_lead
     save_checked(enrollment)
     user = enrollment.intern.user
+    previous_email = user.email
     user.first_name, _, user.last_name = name.strip().partition(" ")
     user.email = email
     save_checked(user)
+    if previous_email != email and (enrollment.intern.must_change_password or not user.has_usable_password()):
+        if email:
+            notifications.queue_welcome(enrollment.intern)
+        else:
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
+            enrollment.intern.must_change_password = False
+            enrollment.intern.save(update_fields=["must_change_password"])
     audit(actor, "roster.updated", enrollment.intern.reference,
           f"team {previous_team} → {enrollment.team_id}; domain {previous_domain} → {domain.pk}; {reason}")
 
 
 @transaction.atomic
-def assign_task(actor, *, enrollment, existing=None, **values):
+def assign_task(actor, *, enrollment, existing=None, notify=True, **values):
     allow_coordinator(actor)
     if existing is None and not enrollment.team_id:
         raise ValidationError("Assign the intern to a team first.")
@@ -104,6 +116,8 @@ def assign_task(actor, *, enrollment, existing=None, **values):
         setattr(assignment, field, value)
     save_checked(assignment)
     audit(actor, "assignment.updated" if existing else "assignment.created", assignment.reference)
+    if notify and existing is None:
+        notifications.queue_assignment(assignment, enrollment.intern.user)
     return assignment
 
 

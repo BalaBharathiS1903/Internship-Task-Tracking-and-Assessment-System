@@ -194,7 +194,7 @@ def handle_row(batch, row, artifacts, dry_run):
         enrollment = s.register_intern(
             actor, reference=row["reference"], name=row["name"], email=row["email"], dit_id=row["dit_id"],
             cohort=cohort, mode=mode, domain=find_domain(row["domain"]), preferred_domain=find_domain(row["preferred_domain"]),
-            team=team,
+            team=team, notify=not dry_run,
         )
         return f"{enrollment.intern.dit_id} · {enrollment.domain}"
     if kind == "tasks":
@@ -204,7 +204,7 @@ def handle_row(batch, row, artifacts, dry_run):
         s.assign_task(
             actor, enrollment=enrollment, reference=row["reference"].upper(), task_code=row["task_code"],
             title=row["title"], instructions=row["instructions"], rubric=rubric_by_label(row["rubric"]),
-            assigned_date=date_value(row["assigned_date"]), due_date=date_value(row["due_date"]),
+            assigned_date=date_value(row["assigned_date"]), due_date=date_value(row["due_date"]), notify=not dry_run,
         )
     if kind == "submissions":
         assignment = own_assignments(actor, m.Assignment.objects).get(reference__iexact=row["assignment"])

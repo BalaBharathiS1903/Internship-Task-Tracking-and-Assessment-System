@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import F, Q
+from django.utils import timezone
 
 code_validator = RegexValidator(r"^[A-Za-z0-9][A-Za-z0-9_/-]*$", "Use letters, numbers, or - _ /.")
 
@@ -56,6 +57,7 @@ class Intern(models.Model):
     college = models.CharField(max_length=160, blank=True)
     placement_role = models.CharField(max_length=100, blank=True)
     joined_on = models.DateField(null=True, blank=True)
+    must_change_password = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         self.dit_id = self.dit_id.strip()
@@ -277,3 +279,21 @@ class FollowUpRun(models.Model):
     date = models.DateField(unique=True)
     items = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class EmailNotification(models.Model):
+    class Kind(models.TextChoices):
+        WELCOME = "welcome", "Intern login"
+        ASSIGNMENT = "assignment", "Task assignment"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=12, choices=Kind.choices)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    recipient = models.EmailField()
+    assignment = models.ForeignKey(Assignment, null=True, blank=True, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    next_attempt_at = models.DateTimeField(default=timezone.now, db_index=True)
+    attempts = models.PositiveIntegerField(default=0)
+    last_error = models.CharField(max_length=180, blank=True)

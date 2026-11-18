@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Delete account{% endblock %}
+{% block content %}
+<section class="panel padded form-width">
+  <h1>Delete {{ target.username }}?</h1>
+  <p>Accounts with linked internship records can be deactivated from Settings to preserve their history.</p>
+  <form method="post" class="stack">{% csrf_token %}<div class="actions"><button class="button primary">Delete account</button><a class="button secondary" href="{% url 'account_settings' %}">Cancel</a></div></form>
+</section>
+{% endblock %}

@@ -8,12 +8,14 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
 
 from . import models as m, reporting as r, services as s
+from .notifications import deliver_pending, temporary_password
 
 
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
@@ -109,6 +111,72 @@ class Workflows(TestCase):
         self.assertRedirects(self.client.post(reverse("delete_team", args=[self.member.team_id])),
                              reverse("team_detail", args=[self.member.team_id]))
         self.assertTrue(m.Team.objects.filter(pk=self.member.team_id).exists())
+
+    @override_settings(DIT_EMAIL_TRANSPORT="django", DIT_EMAIL_FROM="internships@example.invalid",
+                       EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend", DIT_MAIL_BACKGROUND=False)
+    def test_registration_sends_generated_credentials_and_requires_password_change(self):
+        self.client.force_login(self.coordinator)
+        response = self.client.post(reverse("new_intern"), {
+            "reference": "EMAIL-01", "name": "New Intern", "email": "new@example.invalid",
+            "dit_id": "DIT-EMAIL-01", "cohort": self.member.cohort_id, "domain": self.member.domain_id,
+            "team": self.member.team_id, "mode": "manual",
+        })
+        self.assertEqual(response.status_code, 302)
+        notice = m.EmailNotification.objects.get(kind="welcome")
+        password = temporary_password(notice)
+        self.assertNotEqual(notice.user.password, password)
+        self.assertEqual(deliver_pending(), 1)
+        self.assertEqual(deliver_pending(), 0)
+        self.assertEqual(mail.outbox[0].to, ["new@example.invalid"])
+        self.assertIn(notice.user.username, mail.outbox[0].body)
+        self.assertIn(password, mail.outbox[0].body)
+        self.assertTrue(self.client.login(username=notice.user.username, password=password))
+        self.assertRedirects(self.client.get(reverse("dashboard")), reverse("account_settings"))
+        changed = self.client.post(reverse("account_settings"), {
+            "action": "password", "old_password": password, "new_password1": "Stronger-local-test-pass!",
+            "new_password2": "Stronger-local-test-pass!",
+        })
+        self.assertRedirects(changed, reverse("account_settings"))
+        self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
+        self.assertFalse(m.Intern.objects.get(user=notice.user).must_change_password)
+
+    @override_settings(DIT_EMAIL_TRANSPORT="django", DIT_EMAIL_FROM="internships@example.invalid",
+                       EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend", DIT_MAIL_BACKGROUND=False)
+    def test_import_confirmation_sends_welcome_and_task_email_to_the_assigned_intern(self):
+        self.client.force_login(self.coordinator)
+        roster = self.download("template", "roster")
+        roster["Data"].append(("MAIL-02", "Import Intern", "import@example.invalid",
+                               self.member.cohort.code, "DIT-EMAIL-02", "manual",
+                               self.member.domain.code, "", self.member.team.code))
+        batch_url, _ = self.upload_batch("roster", roster)
+        self.assertFalse(m.EmailNotification.objects.exists())
+        self.assertEqual(self.client.post(batch_url).status_code, 302)
+        self.assertEqual(self.client.post(batch_url).status_code, 302)
+        self.assertEqual(m.EmailNotification.objects.filter(kind="welcome").count(), 1)
+        task_book = self.download("template", "tasks")
+        today = timezone.localdate()
+        task_book["Data"].append(("MAIL-TASK", "TASK-07", "Build the report", "DIT-EMAIL-02", self.member.cohort.code,
+                                  self.member.team.code, str(self.rubric), today.isoformat(), today.isoformat(),
+                                  "Submit the Python report and README."))
+        task_batch, _ = self.upload_batch("tasks", task_book)
+        self.assertFalse(m.EmailNotification.objects.filter(kind="assignment").exists())
+        self.assertEqual(self.client.post(task_batch).status_code, 302)
+        self.assertEqual(deliver_pending(), 2)
+        message = next(item for item in mail.outbox if "TASK-07" in item.subject)
+        self.assertEqual(message.to, ["import@example.invalid"])
+        self.assertIn("Greetings from DefineInfoTech Pvt. Ltd.", message.body)
+        self.assertIn("Submit the Python report and README.", message.body)
+        self.assertIn("Due on:", message.body)
+
+    def test_settings_protects_other_coordinators_and_logs_activity(self):
+        another = get_user_model().objects.create_user("another-coordinator")
+        another.groups.add(self.coordinator.groups.get(name="Coordinators"))
+        self.client.force_login(self.coordinator)
+        self.assertContains(self.client.get(reverse("account_settings")), "Recent activity")
+        self.assertEqual(self.client.post(reverse("manage_user", args=[another.pk, "status"])).status_code, 403)
+        self.client.force_login(self.intern)
+        self.assertNotContains(self.client.get(reverse("account_settings")), "User management")
+        self.assertEqual(self.client.post(reverse("account_settings"), {"action": "add_coordinator"}).status_code, 403)
 
     def test_intern_pages_and_scoping(self):
         self.client.force_login(self.intern)

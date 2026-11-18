@@ -43,13 +43,15 @@
     </nav>
     <div class="sidebar-end">
       <a href="{% url 'guide' %}">{% include "icon.html" with name="book" only %} User guide</a>
+      <a href="{% url 'account_settings' %}" {% if request.resolver_match.url_name == 'account_settings' %}aria-current="page"{% endif %}>{% include "icon.html" with name="settings" only %} Settings</a>
+      <div class="account sidebar-account"><span class="avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|slice:":1"|upper }}</span><div><strong>{{ user.get_full_name|default:user.username }}</strong><small>{% if user.is_superuser %}Administrator{% elif coordinator %}Coordinator{% elif team_lead %}Intern · Team Lead{% else %}{{ intern_profile.dit_id|default:"Intern" }}{% endif %}</small></div></div>
       <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">{% include "icon.html" with name="sign-out" only %} Sign out</button></form>
     </div>
   </aside>
   <div class="workspace">
     <header class="topbar">
       <span>Internship operations <span aria-hidden="true">/</span> <strong>{% block crumb %}Workspace{% endblock %}</strong></span>
-      <div class="account"><span class="avatar" aria-hidden="true">{{ user.get_full_name|default:user.username|slice:":1"|upper }}</span><div><strong>{{ user.get_full_name|default:user.username }}</strong><small>{% if coordinator %}Coordinator{% elif team_lead %}Intern · Team Lead{% else %}{{ intern_profile.dit_id|default:"Intern" }}{% endif %}</small></div></div>
+      <span class="topbar-date">{% include "icon.html" with name="calendar" only %} {% now "j M Y" %}</span>
     </header>
     <main class="main" id="main">
 {% else %}

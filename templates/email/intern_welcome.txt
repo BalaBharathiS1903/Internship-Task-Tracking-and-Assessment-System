@@ -1,0 +1,17 @@
+{% autoescape off %}Dear {{ name }},
+
+Greetings from DefineInfoTech Pvt. Ltd. (DIT).
+
+Your Internship Desk account is ready.
+
+DIT Internship ID: {{ dit_id }}
+Username: {{ username }}
+Temporary password: {{ temporary_password }}
+Sign in: {{ login_url }}
+
+Choose a new password at your first sign-in. Use Internship Desk to view assignments, submit your work, and see feedback.
+
+Regards,
+HRD / Internship Coordination Team
+DefineInfoTech Pvt. Ltd. (DIT)
+We Define Intellect{% endautoescape %}

@@ -24,6 +24,16 @@ Open [Internship Desk](http://127.0.0.1:8000/) and sign in to set up internship 
 
 Every workbook includes an example and version metadata. Fill its Data sheet and confirm the preview to commit changes. When a row fails, download its error report, correct the source workbook, and upload again.
 
+## Settings and automatic email
+
+Settings includes account details, password changes, coordinator user management, Team Lead designation, recent activity, and email delivery status. When a new intern record has an email address, the app generates a username and a temporary password and queues a welcome email. The intern must change the temporary password at first sign-in. Records without email can use the private activation link in Intern Master.
+
+Each newly assigned task queues a separate email to the assigned intern, including the task code, title, due date, instructions, and the assignment link. Workbook previews and task edits do not send mail.
+
+On Render, set `DIT_EMAIL_FROM` to a verified Resend sender such as `DefineInfoTech Internship Desk <internships@your-verified-domain.example>` and set `DIT_RESEND_API_KEY` in the service's Environment page. `DIT_PUBLIC_URL` overrides the portal URL for email links when using a custom domain. Render's free web service blocks standard SMTP ports, so the default transport uses Resend over HTTPS.
+
+After configuring delivery, open **Settings → Email notifications** to send any ready emails. Locally, `python manage.py deliver_notifications` also drains ready entries. Delivery failures remain in the queue for retry. For a local SMTP deployment, use `DIT_EMAIL_TRANSPORT=django` and configure the Django email backend separately.
+
 ## Render demo
 
 The Blueprint in `render.yaml` runs one free web service in Singapore with SQLite. The database starts empty, with the `DITcoordinator` account provisioned from the `DJANGO_COORDINATOR_PASSWORD` environment variable.

@@ -135,12 +135,14 @@ def new_intern(request):
     if request.method == "POST" and form.is_valid():
         try:
             enrollment = s.register_intern(request.user, **form.cleaned_data)
-            messages.success(request, f"Intern registered as {enrollment.intern.dit_id}. Share the activation link privately.")
+            followup = ("The login email was queued." if enrollment.intern.user.email else
+                        "Share the activation link privately or add the intern's email address.")
+            messages.success(request, f"Intern registered as {enrollment.intern.dit_id}. {followup}")
             return redirect("edit_intern", pk=enrollment.pk)
         except (ValidationError, IntegrityError) as exc:
             form_error(form, exc)
     return render_form(request, form, "Register an intern", reverse("roster"), "Register intern",
-                       description="Enter an approved roster record and select how its domain is assigned.")
+                       description="Add the intern’s email address to send their username and temporary password.")
 
 
 @coordinator_required
@@ -243,7 +245,9 @@ def assignment_form(request, pk=None):
                 item = s.assign_task(request.user, existing=locked, **values)
                 if reason:
                     s.audit(request.user, "assignment.reason", item.reference, reason)
-            messages.success(request, "Assignment saved.")
+            messages.success(request, "Assignment saved." + (
+                " The task email was queued." if locked is None and item.enrollment.intern.user.email else ""
+            ))
             return redirect("task", pk=item.pk)
         except (ValidationError, IntegrityError) as exc:
             form_error(form, exc)
