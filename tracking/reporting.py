@@ -1,4 +1,4 @@
-from django.db.models import Count, Prefetch
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from . import models as m
@@ -13,19 +13,16 @@ METRICS = [
 
 def records(queryset=None):
     queryset = m.Assignment.objects.all() if queryset is None else queryset
-    submissions = m.Submission.objects.select_related("evaluation").annotate(
-        score_count=Count("evaluation__scores")
-    ).order_by("-version")
-    return queryset.select_related("enrollment__intern__user", "team__cohort", "domain", "rubric").annotate(
-        criterion_count=Count("rubric__criteria")
-    ).prefetch_related(Prefetch("submissions", queryset=submissions, to_attr="versions"))
+    submissions = m.Submission.objects.select_related("review").order_by("-version")
+    return queryset.select_related("enrollment__intern__user", "team__cohort", "domain").prefetch_related(
+        Prefetch("submissions", queryset=submissions, to_attr="versions"),
+    )
 
 
 def describe(assignment, today):
     current = assignment.versions[0] if assignment.versions else None
-    evaluation = getattr(current, "evaluation", None) if current else None
-    published = evaluation if evaluation and evaluation.published_at else None
-    complete = bool(published and published.decision == m.Evaluation.Decision.PASSED)
+    review = getattr(current, "review", None) if current else None
+    complete = bool(review and review.decision == m.SubmissionReview.Decision.COMPLETED and not assignment.cancelled)
     deadline = assignment.revision_due or assignment.due_date
     awaiting = bool(not current or assignment.revision_due)
     overdue = not assignment.cancelled and not complete and awaiting and deadline < today
@@ -33,26 +30,23 @@ def describe(assignment, today):
     if assignment.started:
         status = "In progress"
     if current:
-        status = published.get_decision_display() if published else "Under review" if evaluation else "Awaiting review"
+        status = review.get_decision_display() if review else "Awaiting review"
     if assignment.cancelled:
         status = "Cancelled"
     return {
         "assignment": assignment,
         "submission": current,
-        "published": published,
+        "review": review,
         "deadline": deadline,
         "complete": complete,
         "overdue": overdue,
         "late": bool(current and timezone.localdate(current.submitted_at) > current.deadline),
         "can_submit": awaiting and not assignment.cancelled and assignment.assigned_date <= today,
         "status": status,
-        "assessment_status": published.get_decision_display() if published else "Under review" if evaluation else "Pending",
+        "review_status": review.get_decision_display() if review else "Awaiting review" if current else "Not submitted",
         "tone": "green" if complete else "orange" if overdue else "blue" if current else "muted",
         "pending": not assignment.cancelled and not complete,
         "missing_submission": not assignment.cancelled and not current,
-        "incomplete_evaluation": bool(
-            not assignment.cancelled and current and not published and current.score_count < assignment.criterion_count
-        ),
     }
 
 
@@ -63,7 +57,7 @@ def rows(queryset, today=None):
 
 def totals(items):
     counts = dict.fromkeys(("total", "complete", "pending", "overdue", "in_review",
-                            "missing_submission", "incomplete_evaluation"), 0)
+                            "missing_submission"), 0)
     for item in items:
         if item["assignment"].cancelled:
             continue
@@ -71,9 +65,8 @@ def totals(items):
         counts["complete"] += item["complete"]
         counts["pending"] += item["pending"]
         counts["overdue"] += item["overdue"]
-        counts["in_review"] += item["status"] in ("Awaiting review", "Under review")
+        counts["in_review"] += item["status"] == "Awaiting review"
         counts["missing_submission"] += item["missing_submission"]
-        counts["incomplete_evaluation"] += item["incomplete_evaluation"]
     counts["percent"] = round(100 * counts["complete"] / counts["total"], 1) if counts["total"] else None
     return counts
 

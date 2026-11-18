@@ -52,9 +52,7 @@ class AssignmentForm(forms.Form):
     enrollment = forms.ModelChoiceField(
         label="Intern and internship batch", queryset=m.Enrollment.objects.filter(team__isnull=False).select_related("intern__user", "cohort"),
     )
-    rubric = forms.ModelChoiceField(label="Scoring guide", queryset=m.Rubric.objects.filter(published=True),
-                                   help_text="Choose a published guide with the rules for scoring this assignment.")
-    assigned_date = forms.DateField(widget=DateInput())
+    assigned_date = forms.DateField(widget=DateInput(), label="Start date")
     due_date = forms.DateField(widget=DateInput())
     instructions = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), required=False)
     cancelled = forms.BooleanField(required=False, label="Cancel this assignment")
@@ -63,8 +61,9 @@ class AssignmentForm(forms.Form):
 
 class SubmissionForm(forms.Form):
     link = forms.URLField(required=False, max_length=500, label="HTTPS project link")
-    artifact = forms.FileField(required=False, label="Project file")
-    note = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), required=False, max_length=4000)
+    artifact = forms.FileField(label="Upload document", help_text="Upload a supported work file up to 15 MB, such as a PDF or Word document.")
+    note = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), max_length=4000, label="Work details",
+                           help_text="Describe what you completed and what the coordinator should check.")
 
 
 class OfflineSubmissionForm(SubmissionForm):
@@ -72,47 +71,13 @@ class OfflineSubmissionForm(SubmissionForm):
     reason = forms.CharField(max_length=200, label="Reason for recording offline")
 
 
-class ScoringItemForm(forms.ModelForm):
-    class Meta:
-        model = m.Criterion
-        fields = ("code", "name", "description", "weight", "minimum", "maximum", "step")
-        labels = {"code": "Item code", "name": "What to assess", "description": "What to look for",
-                  "weight": "Share of final score (%)", "minimum": "Lowest allowed score",
-                  "maximum": "Highest allowed score", "step": "Score increases by"}
-        help_texts = {
-            "code": "Use a short identifier such as QUALITY.",
-            "weight": "Enter 60 if this item should count for 60 points out of 100.",
-            "step": "For a range of 0 to 10, enter 2 to allow 0, 2, 4, 6, 8, and 10.",
-        }
-
-
-class EvaluationForm(forms.Form):
-    decision = forms.ChoiceField(
-        required=False, choices=[("", "Save draft"), *m.Evaluation.Decision.choices],
-    )
-    revision_due = forms.DateField(label="Revision deadline", required=False, widget=DateInput())
-
-    def __init__(self, *args, criteria, scores, **kwargs):
-        super().__init__(*args, **kwargs)
-        for item in criteria:
-            saved = scores.get(item.pk)
-            self.fields[f"score_{item.pk}"] = forms.DecimalField(
-                required=False, max_digits=8, decimal_places=2,
-                label=f"{item.name} · {item.weight.normalize():f}% of final score",
-                initial=saved.value if saved else None,
-                min_value=item.minimum, max_value=item.maximum,
-                help_text=f"{item.score_help} {item.description}".strip(),
-            )
-            self.fields[f"comment_{item.pk}"] = forms.CharField(
-                required=False, max_length=2000, label=f"{item.name} · Coordinator notes",
-                initial=saved.comment if saved else "",
-            )
-            self.fields[f"feedback_{item.pk}"] = forms.CharField(
-                required=False, max_length=4000, label=f"{item.name} · Feedback",
-                initial=saved.feedback if saved else "", widget=forms.Textarea(attrs={"rows": 2}),
-            )
-        self.order_fields([name for name in self.fields if name not in ("decision", "revision_due")]
-                          + ["decision", "revision_due"])
+class SubmissionReviewForm(forms.Form):
+    decision = forms.ChoiceField(label="Review decision", choices=[("", "Choose a decision"), *m.SubmissionReview.Decision.choices])
+    feedback = forms.CharField(label="Review comments", required=False, max_length=4000,
+                               widget=forms.Textarea(attrs={"rows": 4}),
+                               help_text="The intern can see these comments. Explain what to change if you request a revision.")
+    revision_due = forms.DateField(label="Revision deadline", required=False, widget=DateInput(),
+                                   help_text="Required for a revision request.")
 
 
 class AttendanceForm(forms.Form):

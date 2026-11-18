@@ -5,11 +5,10 @@
   <a class="text-link back" href="{{ back }}">← Back</a>
   <div class="page-heading"><div><h1>{{ title }}</h1>{% if description %}<p>{{ description }}</p>{% endif %}</div></div>
   {% if invite %}<section class="panel padded"><h2>Account activation</h2><p>Share this one-time link privately with the verified intern.</p><input type="text" readonly value="{{ invite }}" aria-label="Private activation link" onclick="this.select()"></section>{% endif %}
-  {% if evidence %}<section class="panel padded"><h2>Submission evidence</h2><p>{{ evidence.note|linebreaksbr }}</p><div class="actions">
+  {% if evidence %}<section class="panel padded"><h2>Work details and document</h2><p>{{ evidence.note|default:"No work details recorded."|linebreaksbr }}</p><div class="actions">
     {% if evidence.link %}<a class="button secondary" href="{{ evidence.link }}" rel="noreferrer" target="_blank">Open project link ↗</a>{% endif %}
-    {% if evidence.artifact %}<a class="button secondary" href="{% url 'artifact' evidence.pk %}">Download file</a>{% endif %}
-    {% if total != None %}<span class="badge teal">Draft total {{ total }} / 100</span>{% endif %}
-  </div>{% if imported_notes %}<h3>Imported assessment notes</h3><p>{{ imported_notes|linebreaksbr }}</p>{% endif %}</section>{% endif %}
+    {% if evidence.artifact %}<a class="button secondary" href="{% url 'artifact' evidence.pk %}">Download document</a>{% endif %}
+  </div></section>{% endif %}
   <section class="panel padded">
     <form class="stack" method="post" enctype="multipart/form-data">
       {% csrf_token %}

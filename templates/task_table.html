@@ -1,5 +1,5 @@
 <div class="table-wrap"><table>
-  <thead><tr><th>Assignment</th>{% if coordinator %}<th>Intern</th><th>College</th><th>Team</th>{% endif %}{% if detailed %}<th>Assigned</th>{% endif %}<th>Deadline</th>{% if detailed %}<th>Submitted</th>{% endif %}<th>Status</th>{% if detailed %}<th>Assessment</th>{% endif %}<th><span class="sr-only">Open</span></th></tr></thead>
+  <thead><tr><th>Assignment</th>{% if coordinator %}<th>Intern</th><th>College</th><th>Team</th>{% endif %}{% if detailed %}<th>Start date</th>{% endif %}<th>Due date</th>{% if detailed %}<th>Submitted</th>{% endif %}<th>Status</th>{% if detailed %}<th>Review status</th>{% endif %}<th><span class="sr-only">Open</span></th></tr></thead>
   <tbody>
   {% for item in items %}
     <tr>
@@ -9,7 +9,7 @@
       <td>{{ item.deadline|date:"j M Y" }}</td>
       {% if detailed %}<td>{{ item.submission.submitted_at|date:"j M Y"|default:"—" }}</td>{% endif %}
       <td><span class="badge {{ item.tone }}">{% if item.overdue %}Overdue{% else %}{{ item.status }}{% endif %}</span>{% if item.late %}<small>Submitted late</small>{% endif %}</td>
-      {% if detailed %}<td>{{ item.assessment_status }}{% if item.published %}<small>{{ item.published.total }} / 100</small>{% endif %}</td>{% endif %}
+      {% if detailed %}<td>{{ item.review_status }}</td>{% endif %}
       <td><a href="{% url 'task' item.assignment.pk %}" aria-label="Open {{ item.assignment.reference }}">→</a></td>
     </tr>
   {% empty %}<tr><td colspan="{% if detailed %}10{% elif coordinator %}7{% else %}4{% endif %}" class="empty">No assignments match this view.</td></tr>{% endfor %}

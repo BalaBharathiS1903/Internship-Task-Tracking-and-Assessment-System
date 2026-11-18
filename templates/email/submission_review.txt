@@ -1,0 +1,11 @@
+{% autoescape off %}Dear {{ name }},
+
+Your coordinator reviewed your submission for {{ assignment.title }} ({{ assignment.task_code }}).
+
+Status: {{ review.get_decision_display }}
+{% if review.feedback %}Review comments: {{ review.feedback }}
+{% endif %}
+Open your assignment for the full review and any next steps: {{ assignment_url }}
+
+Internship Coordination Team
+DefineInfoTech Pvt. Ltd.{% endautoescape %}

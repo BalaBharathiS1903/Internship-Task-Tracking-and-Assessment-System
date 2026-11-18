@@ -28,8 +28,7 @@
   <section class="panel">
     <div class="panel-heading"><div><h2>Needs attention</h2><p>Overdue work and queued reviews</p></div></div>
     <div class="attention">
-      <a href="{% url 'assessments' %}?queue=review&amp;{{ request.GET.urlencode }}"><span class="chip blue">☆</span><div><strong>Awaiting assessment</strong><small>Open the assessment queue</small></div><b>{{ counts.in_review }}</b></a>
-      <a href="{% url 'assessments' %}?queue=incomplete&amp;{{ request.GET.urlencode }}"><span class="chip blue">◷</span><div><strong>Incomplete evaluations</strong><small>Submissions still missing scores</small></div><b>{{ counts.incomplete_evaluation }}</b></a>
+      <a href="{% url 'reviews' %}?queue=review&amp;{{ request.GET.urlencode }}"><span class="chip blue">☆</span><div><strong>Awaiting review</strong><small>Open the submission queue</small></div><b>{{ counts.in_review }}</b></a>
       <a href="{% url 'tasks' %}?state=missing_submission&amp;{{ request.GET.urlencode }}"><span class="chip muted">↓</span><div><strong>Missing submissions</strong><small>Assignments awaiting a first submission</small></div><b>{{ counts.missing_submission }}</b></a>
       {% for item in overdue_items %}
       <a href="{% url 'task' item.assignment.pk %}"><span class="chip orange">!</span><div><strong>{{ item.assignment.title }}</strong><small>{{ item.assignment.team }} · Due {{ item.deadline|date:"j M" }}</small></div><span aria-hidden="true">→</span></a>

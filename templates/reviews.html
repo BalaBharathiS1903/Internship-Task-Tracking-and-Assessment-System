@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Submission reviews{% endblock %}
+{% block crumb %}Submission reviews{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>{% if coordinator %}Submission reviews{% else %}My reviews{% endif %}</h1>
+  <p>{% if coordinator %}Check the work details and document, then mark the task complete or request a revision.{% else %}Track your submissions and see what your coordinator decided.{% endif %}</p>
+</div></div>
+{% if coordinator %}{% include "filters.html" %}{% endif %}
+<section class="panel"><div class="table-wrap"><table>
+  <thead><tr><th>Assignment</th>{% if coordinator %}<th>Intern</th><th>College</th>{% endif %}<th>Submitted</th><th>Status</th><th>Action</th></tr></thead>
+  <tbody>{% for item in items %}
+  <tr><td><strong>{{ item.assignment.title }}</strong><small>{{ item.assignment.reference }}</small></td>
+    {% if coordinator %}<td>{{ item.assignment.enrollment.intern }}</td><td>{{ item.assignment.enrollment.intern.college|default:"—" }}</td>{% endif %}
+    <td>{{ item.submission.submitted_at|date:"j M Y" }}<small>Version {{ item.submission.version }}</small></td>
+    <td><span class="badge {{ item.tone }}">{{ item.status }}</span></td>
+    <td>{% if coordinator and not item.review and not item.assignment.cancelled %}<a class="button primary small" href="{% url 'review_submission' item.submission.pk %}">Verify submission</a>{% else %}<a class="text-link" href="{% url 'task' item.assignment.pk %}">View →</a>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="{{ coordinator|yesno:'6,4' }}" class="empty">No submissions to show.</td></tr>{% endfor %}</tbody>
+</table></div>{% include "pagination.html" %}</section>
+{% endblock %}

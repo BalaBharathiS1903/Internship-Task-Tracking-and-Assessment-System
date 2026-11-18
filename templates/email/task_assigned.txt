@@ -7,7 +7,7 @@ You have been assigned the following task for your internship.
 Task: {{ assignment.task_code }} – {{ assignment.title }}
 Assignment reference: {{ assignment.reference }}
 Team: {{ assignment.team.name }}
-Assigned on: {{ assigned }}
+Start date: {{ assigned }}
 Due on: {{ due }} (India time)
 {% if assignment.instructions %}
 Task instructions and deliverables:

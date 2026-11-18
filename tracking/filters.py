@@ -37,7 +37,7 @@ def college_options():
 
 TASK_STATUSES = (
     ("Not started", "Not started"), ("In progress", "In progress"), ("Awaiting review", "Submitted"),
-    ("Under review", "Under review"), ("Passed", "Completed"), ("Needs revision", "Needs revision"),
+    ("Completed", "Completed"), ("Needs revision", "Needs revision"),
     ("Overdue", "Overdue"), ("Cancelled", "Cancelled"),
 )
 
@@ -49,9 +49,9 @@ class TaskFilters(forms.Form):
                                   empty_label="All teams")
     college = forms.ChoiceField(required=False, label="College")
     task_status = forms.ChoiceField(required=False, label="Task status", choices=[("", "All statuses"), *TASK_STATUSES])
-    assessment_status = forms.ChoiceField(required=False, label="Assessment status", choices=[
-        ("", "All"), ("Pending", "Pending"), ("Under review", "Under review"),
-        ("Passed", "Passed"), ("Needs revision", "Needs revision"),
+    review_status = forms.ChoiceField(required=False, label="Review status", choices=[
+        ("", "All"), ("Not submitted", "Not submitted"), ("Awaiting review", "Awaiting review"),
+        ("Completed", "Completed"), ("Needs revision", "Needs revision"),
     ])
     date_on = forms.ChoiceField(required=False, label="Date range on", choices=[
         ("due", "Due date"), ("assigned", "Assigned date"), ("submitted", "Submission date"),
@@ -83,8 +83,8 @@ def task_rows(items, cleaned, state=None, *, sort_newest=False):
         items = [item for item in items if item[state]]
     if status := cleaned.get("task_status"):
         items = [item for item in items if ("Overdue" if item["overdue"] else item["status"]) == status]
-    if assessment := cleaned.get("assessment_status"):
-        items = [item for item in items if item["assessment_status"] == assessment]
+    if review := cleaned.get("review_status"):
+        items = [item for item in items if item["review_status"] == review]
     start, end = cleaned.get("date_from"), cleaned.get("date_to")
     if start or end:
         date_on = cleaned.get("date_on") or "due"

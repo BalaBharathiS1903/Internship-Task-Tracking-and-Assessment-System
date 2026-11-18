@@ -1,6 +1,6 @@
 # Internship Desk
 
-Internship Desk is a Django workspace for intern onboarding, task tracking, attendance, and rubric-based assessment. The coordinator assigns tasks and publishes results. Interns submit their own work. An intern designated as Team Lead can monitor the team's task status and send individual in-app messages.
+Internship Desk is a Django workspace for intern onboarding, task tracking, attendance, and submission review. The coordinator assigns tasks and verifies completed work. Interns submit their own work. An intern designated as Team Lead can monitor the team's task status and send individual in-app messages.
 
 ## Run locally on Windows
 
@@ -12,15 +12,15 @@ python -m venv .venv
 .\.venv\Scripts\python.exe manage.py runserver
 ```
 
-Open [Internship Desk](http://127.0.0.1:8000/) and sign in to set up internship batches, domains, teams, and scoring guides. Register each intern, then share the private activation link from their record. A superuser can add coordinator accounts to the `Coordinators` group in Django administration.
+Open [Internship Desk](http://127.0.0.1:8000/) and sign in to set up internship batches, domains, and teams. Register each intern, then share the private activation link from their record. A superuser can add coordinator accounts to the `Coordinators` group in Django administration.
 
 ## Main workflows
 
 1. **Onboard.** Enter approved intern records manually or download the Intern Master template from Upload Center. Enter College and Domain for each intern. Workbook intake assigns the least populated team in the batch and domain, creating the first team if needed. Complete the optional Setup sheet for new batches or domains. Use a batch ID prefix only when authorized to issue DIT IDs locally.
-2. **Assign.** Publish a scoring guide with weights totaling 100%. Assign tasks individually or use the task register workbook.
-3. **Submit.** Interns sign in and provide an HTTPS link or a project file. The personal submission manifest supports multiple assignments and file attachments. The server derives the DIT ID from the authenticated account.
-4. **Assess.** The coordinator reviews evidence, enters scores or imports the score workbook, checks criterion feedback, and publishes Passed or Needs revision. A revision opens another submission cycle with its own deadline.
-5. **Monitor.** Team Leads use the same intern account and their read-only Team workspace. Messages go to the selected teammate's inbox. The coordinator manages attendance and exports team follow-ups, task registers, Intern Master, attendance, and released results.
+2. **Assign.** Set a start date and due date for each task. Assign tasks individually or use the task register workbook.
+3. **Submit.** Interns enter work details and upload a document for their own assignment. The personal submission manifest supports multiple assignments and document attachments. The server derives the DIT ID from the authenticated account.
+4. **Verify.** The coordinator checks the work details and uploaded document, then marks the task Completed or Needs revision. A revision includes comments and a new deadline. The intern sees the status in My reviews.
+5. **Monitor.** Team Leads use the same intern account and their read-only Team workspace to view team task status. Messages go to the selected teammate's inbox. The coordinator manages attendance and exports team follow-ups, task registers, Intern Master, attendance, and review records.
 
 Every workbook includes an example and version metadata. Fill its Data sheet and confirm the preview to commit changes. When a row fails, download its error report, correct the source workbook, and upload again.
 
@@ -30,7 +30,7 @@ Settings includes account details, password changes, coordinator user management
 
 Coordinators can download user names, usernames, and valid onboarding passwords from User management. The password status column shows which accounts require activation or already have a password set.
 
-Each newly assigned task queues a separate email to the assigned intern, including the task code, title, due date, instructions, and the assignment link. Workbook previews and task edits do not send mail.
+Each newly assigned task queues a separate email to the assigned intern, including the task code, title, start date, due date, instructions, and assignment link. A completed review queues the decision for the intern. Workbook previews and task edits do not send mail.
 
 On Render, set `DIT_EMAIL_FROM` to a verified Resend sender such as `DefineInfoTech Internship Desk <internships@your-verified-domain.example>` and set `DIT_RESEND_API_KEY` in the service's Environment page. `DIT_PUBLIC_URL` overrides the portal URL for email links when using a custom domain. Render's free web service blocks standard SMTP ports, so the default transport uses Resend over HTTPS.
 

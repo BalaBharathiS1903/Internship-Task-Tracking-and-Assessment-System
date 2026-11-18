@@ -1,5 +1,4 @@
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from datetime import date
 from io import BytesIO
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile, ZipFile
@@ -23,27 +22,23 @@ from .reporting import rows
 SCHEMAS = {
     "roster": ("Intern Master", ("reference", "name", "email", "college", "phone", "placement_role", "joined_on",
                                 "cohort", "dit_id", "domain")),
-    "tasks": ("Task register", ("reference", "task_code", "title", "dit_id", "cohort", "team", "rubric", "assigned_date", "due_date", "instructions")),
+    "tasks": ("Task register", ("reference", "task_code", "title", "dit_id", "cohort", "team", "assigned_date", "due_date", "instructions")),
     "submissions": ("Submission manifest", ("assignment", "artifact", "link", "note")),
     "attendance": ("Attendance register", ("session", "dit_id", "status", "reason")),
-    "criteria": ("Scoring items", ("rubric", "code", "name", "description", "weight", "minimum", "maximum", "step")),
-    "scores": ("Score register", ("assignment", "version", "criterion", "score", "comment", "feedback")),
 }
 EXAMPLES = {
     "roster": ("STU-100", "Aparna Rao", "aparna@example.invalid", "Example College", "", "Web Development Intern",
                "2026-11-10", "C26", "", "WEB"),
-    "tasks": ("WEB-100", "WEB-01", "Create a prototype", "DIT-C26-0001", "C26", "WEB-A", "Project v1", "2026-11-10", "2026-11-17", ""),
+    "tasks": ("WEB-100", "WEB-01", "Create a prototype", "DIT-C26-0001", "C26", "WEB-A", "2026-11-10", "2026-11-17", ""),
     "submissions": ("WEB-100", "prototype.pdf", "", "First submission"),
     "attendance": ("SESSION-01", "DIT-C26-0001", "present", ""),
-    "criteria": ("Project v1", "QUALITY", "Quality", "Working result", "100", "0", "10", "1"),
-    "scores": ("WEB-100", "1", "QUALITY", "8", "Good coverage", ""),
 }
 MAX_ROWS = 500
 SETUP_COLUMNS = ("internship_batch", "batch_name", "local_dit_prefix", "domain", "domain_name")
 
 
 def template_version(kind):
-    return "2" if kind == "roster" else "1"
+    return "2" if kind in ("roster", "tasks") else "1"
 
 
 def template_headers(kind):
@@ -93,12 +88,9 @@ def template(kind, user):
         ("Batch limit", str(MAX_ROWS)),
     ]
     if kind == "submissions":
-        info.append(("Artifact", "Enter the exact filename of an attached file, or use an HTTPS link. Remove unused rows."))
+        info.append(("Artifact", "Enter the exact filename of an attached document and describe the completed work in note. An HTTPS link is optional."))
         eligible = [item for item in rows(own_assignments(user, m.Assignment.objects.all())) if item["can_submit"]]
         add_rows(sheet, [(item["assignment"].reference, "", "", "") for item in eligible[:MAX_ROWS]])
-    if kind == "criteria":
-        info.append(("Share of final score", "Use weight for how much the item counts. Add all shares to 100% before publishing."))
-        info.append(("Allowed scores", "Use minimum and maximum for the lowest and highest scores. Use step for the amount between scores."))
     if kind == "roster":
         info.append(("Required fields", "Enter intern reference, name, college, internship batch, and domain. Enter an official DIT ID when local issuance is disabled."))
         info.append(("Team allocation", "Enter a domain code or name. The import assigns an available team in that batch and domain, creating the first team if needed."))
@@ -156,16 +148,20 @@ def parse(upload, kind, *, include_setup=False):
         try:
             headers = SCHEMAS[kind][1]
             metadata = book["Instructions"]
-            accepted_labels = {SCHEMAS[kind][0].casefold()}
-            if kind == "criteria":
-                accepted_labels.add("rubric criteria")
-            if str(metadata["B2"].value) != template_version(kind) or str(metadata["B1"].value).strip().casefold() not in accepted_labels:
+            version = str(metadata["B2"].value)
+            if str(metadata["B1"].value).strip().casefold() != SCHEMAS[kind][0].casefold():
+                raise ValidationError("Download the current template for this workflow.")
+            expected = template_headers(kind)
+            if kind == "tasks" and version == "1":
+                headers = (*headers[:6], "rubric", *headers[6:])
+                expected = (*expected[:6], "rubric", *expected[6:])
+            elif version != template_version(kind):
                 raise ValidationError("Download the current template for this workflow.")
             data = book["Data"]
             data.reset_dimensions()
             sheet_rows = data.iter_rows(max_col=len(headers) + 1)
             actual = next(sheet_rows, ())
-            if tuple(cell.value for cell in actual[:len(headers)]) not in (headers, template_headers(kind)) or actual[-1].value is not None:
+            if tuple(cell.value for cell in actual[:len(headers)]) not in (headers, expected) or actual[-1].value is not None:
                 raise ValidationError("The Data sheet headers must match the selected template.")
             result = []
             for number, sheet_row in enumerate(sheet_rows, 2):
@@ -180,7 +176,7 @@ def parse(upload, kind, *, include_setup=False):
                         label = "DIT ID" if name == "dit_id" else "phone number"
                         raise ValidationError(f"Row {number}: enter the {label} as text to preserve leading zeros.")
                 values = {name: str(cell.value).strip()[:4001] if cell.value is not None else ""
-                          for name, cell in zip(headers, sheet_row)}
+                          for name, cell in zip(headers, sheet_row) if name != "rubric"}
                 if kind == "submissions" and not (values["artifact"] or values["link"] or values["note"]):
                     continue
                 result.append({"number": number, **values})
@@ -265,13 +261,6 @@ def date_value(value):
     return date.fromisoformat(value.split(" ")[0])
 
 
-def rubric_by_label(value):
-    name, marker, version = value.rpartition(" v")
-    if not marker:
-        raise ValidationError("Use a rubric label such as Project v1.")
-    return m.Rubric.objects.get(name__iexact=name, version=int(version))
-
-
 def find_domain(cohort, value):
     if not value:
         raise ValidationError("Enter a domain code or name.")
@@ -309,7 +298,7 @@ def handle_row(batch, row, artifacts, dry_run):
             raise ValidationError("The team code must match the intern's current allocation.")
         s.assign_task(
             actor, enrollment=enrollment, reference=row["reference"].upper(), task_code=row["task_code"],
-            title=row["title"], instructions=row["instructions"], rubric=rubric_by_label(row["rubric"]),
+            title=row["title"], instructions=row["instructions"],
             assigned_date=date_value(row["assigned_date"]), due_date=date_value(row["due_date"]), notify=not dry_run,
         )
     if kind == "submissions":
@@ -322,23 +311,7 @@ def handle_row(batch, row, artifacts, dry_run):
         session = m.AttendanceSession.objects.get(reference__iexact=row["session"])
         enrollment = m.Enrollment.objects.get(intern__dit_key=row["dit_id"].upper(), cohort=session.team.cohort)
         s.mark_attendance(actor, session, enrollment, row["status"].lower(), row["reason"])
-    if kind == "criteria":
-        s.add_criterion(actor, rubric_by_label(row["rubric"]), code=row["code"].upper(), name=row["name"],
-                        description=row["description"], weight=decimal_value(row["weight"]),
-                        minimum=decimal_value(row["minimum"]), maximum=decimal_value(row["maximum"]),
-                        step=decimal_value(row["step"]))
-    if kind == "scores":
-        submission = m.Submission.objects.get(assignment__reference__iexact=row["assignment"], version=int(row["version"]))
-        criterion = submission.assignment.rubric.criteria.get(code__iexact=row["criterion"])
-        s.assess(actor, submission, {criterion.pk: (decimal_value(row["score"]), row["comment"], row["feedback"])})
     return "Ready"
-
-
-def decimal_value(text):
-    value = Decimal(text)
-    if not value.is_finite() or abs(value) >= 1000000 or value.as_tuple().exponent < -2:
-        raise ValidationError("Use a finite decimal with up to two decimal places.")
-    return value
 
 
 KEYS = {
@@ -346,8 +319,6 @@ KEYS = {
     "tasks": ("reference",),
     "submissions": ("assignment",),
     "attendance": ("session", "dit_id"),
-    "criteria": ("rubric", "code"),
-    "scores": ("assignment", "version", "criterion"),
 }
 
 
@@ -382,8 +353,8 @@ def apply_batch(batch, dry_run=True):
             error = " ".join(exc.messages)
         except (ObjectDoesNotExist, MultipleObjectsReturned):
             error = "An identifier does not match a record available for this workflow."
-        except (InvalidOperation, ValueError, OverflowError):
-            error = "Use valid dates, versions, and numeric scores."
+        except (ValueError, OverflowError):
+            error = "Use valid dates and field values."
         except IntegrityError:
             error = "A unique identifier is already in use or a record constraint failed."
         output.append({"number": row["number"], "reference": " · ".join(key), "error": error, "detail": detail})

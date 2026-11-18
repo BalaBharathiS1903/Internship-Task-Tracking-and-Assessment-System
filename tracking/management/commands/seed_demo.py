@@ -1,10 +1,10 @@
 import os
 from datetime import timedelta
-from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 from django.utils import timezone
@@ -65,17 +65,6 @@ class Command(BaseCommand):
             domain = s.save_checked(m.Domain(code=f"DEMO-{code}", name=name))
             domain.cohorts.add(cohort)
             teams.append(s.save_checked(m.Team(code=code, cohort=cohort, domain=domain, name=team_name)))
-        rubric = s.save_checked(m.Rubric(name="Demo project", version=1))
-        criteria = [
-            s.add_criterion(coordinator, rubric, code=code, name=name, description=description,
-                            weight=Decimal(weight), minimum=Decimal(0), maximum=Decimal(scale), step=Decimal(1))
-            for code, name, description, weight, scale in (
-                ("QUALITY", "Implementation quality", "Check that the key requirements work.", 60, 10),
-                ("DOCS", "Evidence and documentation", "Explain how to reproduce the result.", 40, 4),
-            )
-        ]
-        s.publish_rubric(coordinator, rubric)
-        rubric.refresh_from_db()
         people = [
             ("MEERA", "Meera Iyer", 0), ("ARJUN", "Arjun Kumar", 0), ("RIYA", "Riya Thomas", 0),
             ("NAVEEN", "Naveen S", 1), ("PRIYA", "Priya Nair", 1),
@@ -106,18 +95,17 @@ class Command(BaseCommand):
             for offset, title in enumerate(titles):
                 assignment = s.assign_task(
                     coordinator, enrollment=enrollment, reference=f"DEMO-{code}-{offset + 1}",
-                    task_code=f"{team.code}-{offset + 1}", title=title, rubric=rubric,
+                    task_code=f"{team.code}-{offset + 1}", title=title,
                     assigned_date=today - timedelta(days=8),
                     due_date=today + timedelta(days=(-2, 4, 7, -1, 2, 8, 3)[index] + offset),
-                    instructions="Attach a file or share an HTTPS link. Include a short note explaining how to review your work.", notify=False,
+                    instructions="Describe the work you completed and attach a document for review.", notify=False,
                 )
                 if offset == 0 and index in (0, 2, 3, 5, 6):
-                    submission = s.submit(user, assignment.pk, link="https://example.invalid/demo-work", note="Synthetic project evidence")
+                    artifact = SimpleUploadedFile("demo-work.txt", b"Synthetic project evidence for the demo.")
+                    submission = s.submit(user, assignment.pk, artifact=artifact, note="Synthetic project evidence")
                     if index in (0, 3, 5):
-                        s.assess(coordinator, submission, {
-                            criteria[0].pk: (Decimal(8), "Key requirements are covered.", ""),
-                            criteria[1].pk: (Decimal(3), "Include a few more verification notes.", ""),
-                        }, decision=m.Evaluation.Decision.PASSED)
+                        s.review_submission(coordinator, submission, decision=m.SubmissionReview.Decision.COMPLETED,
+                                            feedback="Verified the work details and document.", notify=False)
         for team in teams:
             session = s.save_checked(m.AttendanceSession(team=team, reference=f"DEMO-{team.code}-01", date=today))
             for member in members:

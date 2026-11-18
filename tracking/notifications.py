@@ -76,6 +76,12 @@ def queue_assignment(assignment, user):
         transaction.on_commit(wake_delivery)
 
 
+def queue_review(review, user):
+    if user.email:
+        Notice.objects.create(kind=Notice.Kind.REVIEW, user=user, recipient=user.email, submission=review.submission)
+        transaction.on_commit(wake_delivery)
+
+
 def email_content(notice):
     user = notice.user
     if not user.is_active or user.email != notice.recipient:
@@ -89,6 +95,16 @@ def email_content(notice):
         context.update(username=user.username, temporary_password=password, dit_id=user.intern.dit_id,
                        login_url=settings.DIT_PUBLIC_URL.rstrip("/") + reverse("login"))
         template = "email/intern_welcome.txt"
+    elif notice.kind == Notice.Kind.REVIEW:
+        submission = notice.submission
+        review = getattr(submission, "review", None)
+        if not review or submission.assignment.enrollment.intern.user_id != user.pk:
+            return None
+        assignment = submission.assignment
+        subject = f"{assignment.task_code} - {review.get_decision_display()} | DIT Internship"
+        context.update(assignment=assignment, review=review,
+                       assignment_url=settings.DIT_PUBLIC_URL.rstrip("/") + reverse("task", args=[assignment.pk]))
+        template = "email/submission_review.txt"
     else:
         assignment = notice.assignment
         if not assignment or assignment.cancelled or assignment.enrollment.intern.user_id != user.pk:
@@ -142,7 +158,8 @@ def deliver_pending(limit=500):
         if not ready.filter(pk=notice_id).update(next_attempt_at=now + timedelta(minutes=2), attempts=F("attempts") + 1):
             continue
         notice = Notice.objects.select_related(
-            "user", "assignment__enrollment__intern", "assignment__team",
+            "user", "assignment__enrollment__intern", "assignment__team", "submission__review",
+            "submission__assignment__enrollment__intern",
         ).get(pk=notice_id)
         try:
             content = email_content(notice)

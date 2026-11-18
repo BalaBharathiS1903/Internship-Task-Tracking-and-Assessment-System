@@ -81,16 +81,13 @@ def dashboard(request):
 
 @coordinator_required
 def registry(request):
-    return render(request, "registry.html", {
-        **filters(), "rubrics": m.Rubric.objects.order_by("name", "version"),
-    })
+    return render(request, "registry.html", filters())
 
 
 SETUP = {
     "cohort": (m.Cohort, ("name", "code", "id_prefix"), "New internship batch", "registry"),
     "domain": (m.Domain, ("name", "code", "cohorts"), "New domain", "registry"),
     "team": (m.Team, ("name", "code", "cohort", "domain", "description"), "New team", "teams"),
-    "rubric": (m.Rubric, ("name", "version"), "New scoring guide", "registry"),
     "session": (m.AttendanceSession, ("reference", "team", "date"), "New attendance session", "attendance"),
 }
 
@@ -117,7 +114,7 @@ def setup_record(request, kind):
                     ])
                 s.audit(request.user, f"{kind}.created", item)
             messages.success(request, "Record created.")
-            return redirect("rubric", pk=item.pk) if kind == "rubric" else redirect(back)
+            return redirect(back)
         except IntegrityError as exc:
             form_error(form, exc)
     return render_form(request, form, title, reverse(back), "Create record", form_grid=True)
@@ -260,22 +257,15 @@ def assignment_form(request, pk=None):
 def task_detail(request, pk):
     assignment = task_for(request.user, pk)
     item = r.describe(assignment, timezone.localdate())
-    published_scores = m.Score.objects.filter(
-        evaluation__submission__assignment=assignment, evaluation__published_at__isnull=False,
-    ).select_related("criterion", "evaluation")
-    by_submission = {}
-    for score in published_scores:
-        by_submission.setdefault(score.evaluation.submission_id, []).append(score)
-    timeline = [(entry, by_submission.get(entry.pk, [])) for entry in assignment.versions]
-    return render(request, "task.html", {"item": item, "assignment": assignment, "timeline": timeline})
+    return render(request, "task.html", {"item": item, "assignment": assignment, "timeline": assignment.versions})
 
 
 @intern_required
 @require_POST
 def start_task(request, pk):
-    assignment = get_object_or_404(own_assignments(request.user, m.Assignment.objects), pk=pk)
-    if not assignment.cancelled and not assignment.submissions.exists():
-        m.Assignment.objects.filter(pk=pk).update(started=True)
+    assignments = own_assignments(request.user, m.Assignment.objects)
+    get_object_or_404(assignments, pk=pk)
+    assignments.filter(pk=pk, cancelled=False, assigned_date__lte=timezone.localdate(), submissions__isnull=True).update(started=True)
     return redirect("task", pk=pk)
 
 
@@ -286,7 +276,7 @@ def submit_task(request, pk):
     if request.method == "POST" and form.is_valid():
         try:
             s.submit(request.user, pk, **form.cleaned_data)
-            messages.success(request, "Submission saved under your verified DIT ID.")
+            messages.success(request, "Work submitted for coordinator review.")
             return redirect("task", pk=pk)
         except (ValidationError, IntegrityError) as exc:
             form_error(form, exc)
@@ -327,80 +317,33 @@ def download_artifact(request, pk):
 
 
 @login_required
-def assessments(request):
+def reviews(request):
     coordinator = is_coordinator(request.user)
     items = [item for item in r.rows(query_scope(request)) if item["submission"]]
-    if not coordinator:
-        items = [item for item in items if item["published"]]
-    elif request.GET.get("queue") == "review":
-        items = [item for item in items if item["status"] in ("Awaiting review", "Under review")]
-    elif request.GET.get("queue") == "incomplete":
-        items = [item for item in items if item["incomplete_evaluation"]]
+    if coordinator and request.GET.get("queue") == "review":
+        items = [item for item in items if item["status"] == "Awaiting review"]
     page = Paginator(items, 20).get_page(request.GET.get("page"))
-    return render(request, "assessments.html", {"items": page, "page": page, **(filters() if coordinator else {})})
+    return render(request, "reviews.html", {"items": page, "page": page, **(filters() if coordinator else {})})
 
 
 @coordinator_required
-def evaluate(request, pk):
-    submission = get_object_or_404(m.Submission.objects.select_related("assignment__rubric", "assignment__enrollment__intern"), pk=pk)
-    evaluation = getattr(submission, "evaluation", None)
-    if evaluation and evaluation.published_at:
-        return redirect("task", pk=submission.assignment_id)
-    criteria = list(submission.assignment.rubric.criteria.all())
-    scores = {item.criterion_id: item for item in evaluation.scores.all()} if evaluation else {}
-    form = f.EvaluationForm(request.POST or None, criteria=criteria, scores=scores)
-    if request.method == "POST" and form.is_valid():
-        entries = {}
-        for item in criteria:
-            value = form.cleaned_data[f"score_{item.pk}"]
-            if value is not None:
-                entries[item.pk] = (value, form.cleaned_data[f"comment_{item.pk}"], form.cleaned_data[f"feedback_{item.pk}"])
-        try:
-            result = s.assess(request.user, submission, entries, decision=form.cleaned_data["decision"],
-                              revision_due=form.cleaned_data["revision_due"])
-            messages.success(request, "Result published." if result.published_at else "Draft saved. Review the feedback before publishing.")
-            return redirect("assessments") if result.published_at else redirect("evaluate", pk=pk)
-        except (ValidationError, IntegrityError) as exc:
-            form_error(form, exc)
-    return render_form(request, form, "Review submission", reverse("assessments"), "Save assessment",
-                       description=f"{submission.assignment} · Submission {submission.version}",
-                       evidence=submission, total=evaluation.total if evaluation else None,
-                       imported_notes=evaluation.imported_notes if evaluation else "")
-
-
-@coordinator_required
-def rubric(request, pk):
-    item = get_object_or_404(m.Rubric, pk=pk)
-    criteria = list(item.criteria.all())
-    total = sum(criterion.weight for criterion in criteria)
-    return render(request, "rubric.html", {"rubric": item, "criteria": criteria, "share_total": total,
-                                          "share_remaining": max(100 - total, 0), "share_over": max(total - 100, 0)})
-
-
-@coordinator_required
-def criterion(request, pk):
-    item = get_object_or_404(m.Rubric, pk=pk)
-    form = f.ScoringItemForm(request.POST or None)
+def review_submission(request, pk):
+    submission = get_object_or_404(m.Submission.objects.select_related("assignment__enrollment__intern__user", "review"), pk=pk)
+    assignment = submission.assignment
+    if assignment.cancelled or hasattr(submission, "review") or assignment.submissions.first() != submission:
+        return redirect("task", pk=assignment.pk)
+    form = f.SubmissionReviewForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         try:
-            s.add_criterion(request.user, item, **form.cleaned_data)
-            messages.success(request, "Scoring item added.")
-            return redirect("rubric", pk=pk)
+            review = s.review_submission(request.user, submission, **form.cleaned_data)
+            messages.success(request, "Task marked complete." if review.decision == m.SubmissionReview.Decision.COMPLETED
+                             else "Revision requested.")
+            return redirect("task", pk=assignment.pk)
         except (ValidationError, IntegrityError) as exc:
             form_error(form, exc)
-    return render_form(request, form, "Add scoring item", reverse("rubric", args=[pk]), "Add scoring item")
-
-
-@coordinator_required
-@require_POST
-def publish_rubric(request, pk):
-    item = get_object_or_404(m.Rubric, pk=pk)
-    try:
-        s.publish_rubric(request.user, item)
-        messages.success(request, "Scoring guide published and available for assignments.")
-    except ValidationError as exc:
-        messages.error(request, " ".join(exc.messages))
-    return redirect("rubric", pk=pk)
+    return render_form(request, form, "Verify submission", reverse("task", args=[assignment.pk]), "Send status to intern",
+                       description=f"{assignment} · Submission {submission.version} · {assignment.enrollment.intern}",
+                       evidence=submission)
 
 
 @login_required
@@ -498,7 +441,7 @@ def allow_import(user, kind):
 @login_required
 def import_center(request):
     return render(request, "imports.html", {"kinds": [(kind, w.SCHEMAS[kind][0]) for kind in import_kinds(request.user)],
-                  "batches": m.ImportBatch.objects.filter(actor=request.user).order_by("-created_at")[:12]})
+                  "batches": m.ImportBatch.objects.filter(actor=request.user, kind__in=w.SCHEMAS).order_by("-created_at")[:12]})
 
 
 @login_required
@@ -632,12 +575,12 @@ def delete_team(request, pk):
 REPORT_CARDS = [
     ("roster", "Intern Master", "Intern details, team placement, and task counts."),
     ("allocation", "Team Allocation", "Team-wise intern allocation and designated leads."),
-    ("tasks", "Complete Task Tracker", "Assignments, deadlines, submissions, and assessment status."),
-    ("completed", "Completed Tasks", "Assignments with a published passing decision."),
+    ("tasks", "Complete Task Tracker", "Assignments, deadlines, submissions, and review status."),
+    ("completed", "Completed Tasks", "Assignments verified and marked complete by the coordinator."),
     ("follow-up", "Pending Tasks", "Open assignments that still need action."),
     ("overdue", "Overdue Tasks", "Unfinished assignments with missed submission deadlines."),
-    ("assessment", "Assessment Report", "Review status and published scores for submitted work."),
-    ("team-lead", "Team Lead Report", "Team membership, completion, overdue work, and assessments."),
+    ("verification", "Submission Review Report", "Verification status, review dates, and coordinator comments."),
+    ("team-lead", "Team Lead Report", "Team membership, completion, overdue work, and submissions awaiting review."),
 ]
 
 
@@ -656,7 +599,7 @@ def reports(request):
 @coordinator_required
 @never_cache
 def export(request, kind):
-    if kind not in {kind for kind, _, _ in REPORT_CARDS} | {"results", "attendance"}:
+    if kind not in {kind for kind, _, _ in REPORT_CARDS} | {"attendance"}:
         raise Http404
     book = Workbook()
     sheet = book.active
@@ -701,7 +644,7 @@ def export(request, kind):
         if kind == "team-lead":
             summaries = report_teams(request.GET, items)
             w.add_rows(sheet, [("Internship batch", "Team", "Leader", "Members", "Total", "Completed", "Pending",
-                                "Overdue", "Assessment pending", "Completion %")])
+                                "Overdue", "Awaiting review", "Completion %")])
             w.add_rows(sheet, [(row["team"].cohort.name, row["team"].name,
                                row["leader"].user.get_full_name() if row["leader"] else "", row["members"],
                                *[row["counts"][key] for key in ("total", "complete", "pending", "overdue", "in_review", "percent")])
@@ -715,37 +658,26 @@ def export(request, kind):
             w.add_rows(member_sheet, [(member.team.name, member.intern.dit_id, member.intern.user.get_full_name(),
                                        member.intern.college, "Team Lead" if member.is_lead else "Member") for member in members])
             w.style(member_sheet)
-        elif kind == "assessment":
-            w.add_rows(sheet, [("DIT ID", "Intern", "College", "Team", "Assignment", "Scoring Guide", "Submitted",
-                                "Task status", "Assessment status", "Published score / 100")])
-            w.add_rows(sheet, [(a.enrollment.intern.dit_id, a.enrollment.intern.user.get_full_name(), a.enrollment.intern.college, a.team.name,
-                               a.reference, str(a.rubric), timezone.localdate(item["submission"].submitted_at),
-                               item["status"], item["assessment_status"], item["published"].total if item["published"] else None)
-                               for item in items if item["submission"] and not item["assignment"].cancelled for a in [item["assignment"]]])
-        elif kind == "results":
-            w.add_rows(sheet, [("DIT ID", "College", "Team", "Assignment", "Scoring Guide", "Submission", "Score / 100", "Decision")])
-            result_rows = [item for item in items if item["published"] and not item["assignment"].cancelled]
-            w.add_rows(sheet, [(a.enrollment.intern.dit_id, a.enrollment.intern.college, a.team.name, a.reference, str(a.rubric),
-                                item["submission"].version, item["published"].total, item["published"].get_decision_display())
-                               for item in result_rows for a in [item["assignment"]]])
-            summary = book.create_sheet("Team Results")
-            group = {}
-            for item in result_rows:
-                team = item["assignment"].team
-                group.setdefault(team.pk, (team, []))[1].append(item["published"].total)
-            w.add_rows(summary, [("Internship batch", "Team", "Released results", "Average / 100")])
-            w.add_rows(summary, [(team.cohort.name, team.name, len(scores), round(sum(scores) / len(scores), 2))
-                                 for team, scores in group.values()])
-            w.style(summary)
+        elif kind == "verification":
+            w.add_rows(sheet, [("DIT ID", "Intern", "College", "Team", "Assignment", "Submitted", "Review status",
+                                "Reviewed on", "Review comments")])
+            for item in items:
+                submission, assignment, review = item["submission"], item["assignment"], item["review"]
+                if submission and not assignment.cancelled:
+                    intern = assignment.enrollment.intern
+                    w.add_rows(sheet, [(intern.dit_id, intern.user.get_full_name(), intern.college, assignment.team.name,
+                                        assignment.reference, timezone.localdate(submission.submitted_at), item["review_status"],
+                                        timezone.localdate(review.published_at) if review else None,
+                                        review.feedback if review else "")])
         else:
-            w.add_rows(sheet, [("Assignment", "Task", "DIT ID", "College", "Team", "Domain", "Assigned", "Deadline", "Submitted",
-                                "Status", "Assessment", "Overdue", "Late")])
+            w.add_rows(sheet, [("Assignment", "Task", "DIT ID", "College", "Team", "Domain", "Start date", "Due date", "Submitted",
+                                "Status", "Review status", "Overdue", "Late")])
             selected = {"follow-up": "pending", "completed": "complete", "overdue": "overdue"}.get(kind)
             display = [item for item in items if item[selected] and not item["assignment"].cancelled] if selected else items
             w.add_rows(sheet, [(a.reference, a.title, a.enrollment.intern.dit_id, a.enrollment.intern.college, a.team.name, a.domain.name,
                                 a.assigned_date.isoformat(), item["deadline"].isoformat(),
                                 timezone.localtime(item["submission"].submitted_at).isoformat() if item["submission"] else "",
-                                item["status"], item["assessment_status"], item["overdue"], item["late"])
+                                item["status"], item["review_status"], item["overdue"], item["late"])
                                for item in display for a in [item["assignment"]]])
             summary = book.create_sheet("Team Totals")
             w.add_rows(summary, [("Internship batch", "Team", "Assignments", "Completed", "Pending", "Overdue", "Completion %")])
@@ -756,7 +688,7 @@ def export(request, kind):
     report_name = "Intern Master" if kind == "roster" else kind
     w.add_rows(metadata, [("Report", report_name), ("Generated", timezone.localtime().isoformat())] +
                [("Internship batch" if key == "cohort" else key, request.GET.get(key, "")[:160]) for key in
-                ("cohort", "team", "domain", "q", "college", "state", "task_status", "assessment_status",
+                ("cohort", "team", "domain", "q", "college", "state", "task_status", "review_status",
                  "date_on", "date_from", "date_to", "sort")])
     w.style(metadata)
     w.style(sheet)

@@ -2,7 +2,7 @@
 {% block title %}Tasks{% endblock %}
 {% block crumb %}Tasks{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>{% if coordinator %}Task tracker{% else %}My work{% endif %}</h1><p>{% if coordinator %}Assign work and track each submission through assessment.{% else %}Track deadlines, submissions, and revision requests.{% endif %}</p></div>
+<div class="page-heading"><div><h1>{% if coordinator %}Task tracker{% else %}My work{% endif %}</h1><p>{% if coordinator %}Assign work and track submissions through coordinator review.{% else %}Track deadlines, submissions, and revision requests.{% endif %}</p></div>
   <div class="actions">{% if coordinator %}<a class="button primary" href="{% url 'new_task' %}">＋ Assign task</a>{% endif %}<a class="button secondary" href="{% url 'new_batch' kind=coordinator|yesno:'tasks,submissions' %}">Bulk upload</a></div>
 </div>
 {% if coordinator %}{% include "task_filters.html" %}{% endif %}

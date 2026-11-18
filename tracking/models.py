@@ -100,48 +100,6 @@ class Enrollment(models.Model):
         return f"{self.intern} · {self.cohort}"
 
 
-class Rubric(models.Model):
-    name = models.CharField(max_length=100)
-    version = models.PositiveIntegerField(default=1)
-    published = models.BooleanField(default=False, editable=False)
-
-    class Meta:
-        constraints = [models.UniqueConstraint(fields=["name", "version"], name="unique_rubric_version")]
-
-    def __str__(self):
-        return f"{self.name} v{self.version}"
-
-
-class Criterion(models.Model):
-    rubric = models.ForeignKey(Rubric, on_delete=models.PROTECT, related_name="criteria")
-    code = models.CharField(max_length=24, validators=[code_validator])
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    weight = models.DecimalField(max_digits=5, decimal_places=2)
-    minimum = models.DecimalField(max_digits=8, decimal_places=2)
-    maximum = models.DecimalField(max_digits=8, decimal_places=2)
-    step = models.DecimalField(max_digits=8, decimal_places=2, default=1)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["rubric", "code"], name="unique_criterion"),
-            models.CheckConstraint(condition=Q(weight__gt=0, weight__lte=100, step__gt=0, maximum__gt=F("minimum")), name="valid_criterion_scale"),
-        ]
-
-    def clean(self):
-        if self.minimum is not None and self.maximum is not None and self.step is not None and self.step > 0:
-            if (self.maximum - self.minimum) % self.step:
-                raise ValidationError({"step": "Choose a step that lands exactly on the highest allowed score."})
-
-    @property
-    def score_help(self):
-        lowest, highest, step = (format(value.normalize(), "f") for value in (self.minimum, self.maximum, self.step))
-        return f"Enter a score from {lowest} to {highest}, going up by {step} from {lowest}."
-
-    def __str__(self):
-        return self.name
-
-
 class Assignment(models.Model):
     reference = models.CharField(max_length=40, unique=True, validators=[code_validator])
     task_code = models.CharField(max_length=40, validators=[code_validator])
@@ -150,7 +108,6 @@ class Assignment(models.Model):
     enrollment = models.ForeignKey(Enrollment, on_delete=models.PROTECT)
     team = models.ForeignKey(Team, on_delete=models.PROTECT)
     domain = models.ForeignKey(Domain, on_delete=models.PROTECT)
-    rubric = models.ForeignKey(Rubric, on_delete=models.PROTECT)
     assigned_date = models.DateField()
     due_date = models.DateField()
     revision_due = models.DateField(null=True, blank=True)
@@ -164,9 +121,7 @@ class Assignment(models.Model):
 
     def clean(self):
         if self.assigned_date and self.due_date and self.due_date < self.assigned_date:
-            raise ValidationError({"due_date": "Due date cannot precede the assignment date."})
-        if self.rubric_id and not self.rubric.published:
-            raise ValidationError({"rubric": "Publish this rubric version before assigning it."})
+            raise ValidationError({"due_date": "Due date cannot precede the start date."})
 
     def __str__(self):
         return f"{self.reference} · {self.title}"
@@ -192,29 +147,16 @@ class Submission(models.Model):
         constraints = [models.UniqueConstraint(fields=["assignment", "version"], name="unique_submission_version")]
 
 
-class Evaluation(models.Model):
+class SubmissionReview(models.Model):
     class Decision(models.TextChoices):
-        PASSED = "passed", "Passed"
+        COMPLETED = "completed", "Completed"
         REVISION = "revision", "Needs revision"
 
-    submission = models.OneToOneField(Submission, on_delete=models.PROTECT, related_name="evaluation")
+    submission = models.OneToOneField(Submission, on_delete=models.PROTECT, related_name="review")
     coordinator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
-    decision = models.CharField(max_length=12, choices=Decision.choices, blank=True)
-    total = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
-    published_at = models.DateTimeField(null=True, blank=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    imported_notes = models.TextField(blank=True)
-
-
-class Score(models.Model):
-    evaluation = models.ForeignKey(Evaluation, on_delete=models.CASCADE, related_name="scores")
-    criterion = models.ForeignKey(Criterion, on_delete=models.PROTECT)
-    value = models.DecimalField(max_digits=8, decimal_places=2)
-    comment = models.TextField(blank=True)
+    decision = models.CharField(max_length=12, choices=Decision.choices)
+    published_at = models.DateTimeField(default=timezone.now)
     feedback = models.TextField(blank=True)
-
-    class Meta:
-        constraints = [models.UniqueConstraint(fields=["evaluation", "criterion"], name="unique_score")]
 
 
 class AttendanceSession(models.Model):
@@ -297,12 +239,14 @@ class EmailNotification(models.Model):
     class Kind(models.TextChoices):
         WELCOME = "welcome", "Intern login"
         ASSIGNMENT = "assignment", "Task assignment"
+        REVIEW = "review", "Submission status"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     kind = models.CharField(max_length=12, choices=Kind.choices)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     recipient = models.EmailField()
     assignment = models.ForeignKey(Assignment, null=True, blank=True, on_delete=models.CASCADE)
+    submission = models.ForeignKey(Submission, null=True, blank=True, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)

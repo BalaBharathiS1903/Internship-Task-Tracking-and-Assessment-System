@@ -1,5 +1,4 @@
 from datetime import timedelta
-from decimal import Decimal
 from io import BytesIO, StringIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -21,6 +20,12 @@ from .notifications import deliver_pending, temporary_password
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
 class Workflows(TestCase):
     @classmethod
+    def setUpClass(cls):
+        media = cls.enterClassContext(TemporaryDirectory())
+        cls.enterClassContext(override_settings(MEDIA_ROOT=media))
+        super().setUpClass()
+
+    @classmethod
     def setUpTestData(cls):
         with override_settings(DEBUG=True), patch.dict("os.environ", {"DJANGO_DEMO_PASSWORD": "Demo-test-only-2026"}):
             call_command("seed_demo", stdout=StringIO())
@@ -31,8 +36,6 @@ class Workflows(TestCase):
         cls.member = cls.intern.intern.enrollments.get()
         cls.outside = m.Enrollment.objects.get(intern__reference="DEMO-NAVEEN")
         cls.assignment = m.Assignment.objects.get(reference="DEMO-ARJUN-1")
-        cls.rubric = cls.assignment.rubric
-        cls.criteria = list(cls.rubric.criteria.order_by("-weight"))
 
     def test_demo_logins_share_password_and_keep_role_permissions(self):
         for user in (self.coordinator, self.lead, self.intern):
@@ -72,41 +75,16 @@ class Workflows(TestCase):
 
     def test_coordinator_pages_render(self):
         self.client.force_login(self.coordinator)
-        sample = m.Submission.objects.filter(evaluation__isnull=True).first()
+        sample = m.Submission.objects.filter(review__isnull=True).first()
         session = m.AttendanceSession.objects.first()
         for route, args in {
             "dashboard": (), "registry": (), "roster": (), "new_intern": (), "edit_intern": (self.member.pk,),
             "tasks": (), "new_task": (), "task": (self.assignment.pk,), "edit_task": (self.assignment.pk,),
-            "assessments": (), "evaluate": (sample.pk,), "rubric": (self.rubric.pk,),
+            "reviews": (), "review_submission": (sample.pk,),
             "attendance": (), "mark_session": (session.pk,), "imports": (), "reports": (), "guide": (),
         }.items():
             with self.subTest(route=route):
                 self.assertEqual(self.client.get(reverse(route, args=args)).status_code, 200)
-
-    def test_scoring_guide_explains_the_score_range_and_remaining_share(self):
-        self.client.force_login(self.coordinator)
-        guide = m.Rubric.objects.create(name="Project assessment", version=1)
-        item = s.add_criterion(self.coordinator, guide, code="QUALITY", name="Implementation quality",
-                               weight=Decimal("82"), minimum=Decimal("172"), maximum=Decimal("182"), step=Decimal("2"))
-        page = self.client.get(reverse("rubric", args=[guide.pk]))
-        for text in ("What to assess", "Share of final score", "Allowed score range", "Score increases by",
-                     "82% assigned", "Assign 18% more", "172 to 182"):
-            self.assertContains(page, text)
-        form = self.client.get(reverse("criterion", args=[guide.pk]))
-        self.assertContains(form, "Lowest allowed score")
-        self.assertContains(form, "Highest allowed score")
-        self.assertEqual(s.weighted_score([item], {item.pk: Decimal("178")}), Decimal("49.20"))
-        with self.assertRaisesMessage(ValidationError, "must add up to 100%"):
-            s.publish_rubric(self.coordinator, guide)
-        workbook = self.download("template", "criteria")
-        self.assertEqual(workbook["Instructions"]["B1"].value, "Scoring items")
-        workbook["Instructions"]["B1"] = "Rubric criteria"
-        workbook["Data"].append((str(guide), "DOCS", "Documentation", "", "18", "0", "10", "1"))
-        batch, preview = self.upload_batch("criteria", workbook)
-        self.assertContains(preview, "1 rows passed validation.")
-        self.assertEqual(self.client.post(batch).status_code, 302)
-        page = self.client.get(reverse("rubric", args=[guide.pk]))
-        self.assertContains(page, "The shares add up to 100%.")
 
     def test_directory_filters_and_reports(self):
         self.client.force_login(self.coordinator)
@@ -117,14 +95,14 @@ class Workflows(TestCase):
         self.assertEqual(len(roster.context["enrollments"]), 1)
         self.assertContains(roster, self.member.intern.dit_id)
         page = self.client.get(reverse("tasks"), {
-            "college": "Campus One", "task_status": "Not started", "assessment_status": "Pending",
+            "college": "Campus One", "task_status": "Not started", "review_status": "Not submitted",
             "date_on": "assigned", "date_from": self.assignment.assigned_date.isoformat(), "sort": "oldest",
         })
         self.assertIn(self.assignment.pk, [item["assignment"].pk for item in page.context["items"]])
         reports = self.client.get(reverse("reports"))
         self.assertContains(reports, "Team Allocation")
         self.assertContains(reports, "Team Lead Report")
-        for kind in ("roster", "allocation", "tasks", "completed", "follow-up", "overdue", "assessment", "team-lead"):
+        for kind in ("roster", "allocation", "tasks", "completed", "follow-up", "overdue", "verification", "team-lead"):
             workbook = self.download("export", kind)
             self.assertIn("Report", workbook)
             detail = workbook["Members"] if kind == "team-lead" else workbook["Report"]
@@ -210,7 +188,7 @@ class Workflows(TestCase):
         task_book = self.download("template", "tasks")
         today = timezone.localdate()
         task_book["Data"].append(("MAIL-TASK", "TASK-07", "Build the report", "DIT-EMAIL-02", self.member.cohort.code,
-                                  self.member.team.code, str(self.rubric), today.isoformat(), today.isoformat(),
+                                  self.member.team.code, today.isoformat(), today.isoformat(),
                                   "Submit the Python report and README."))
         task_batch, _ = self.upload_batch("tasks", task_book)
         self.assertFalse(m.EmailNotification.objects.filter(kind="assignment").exists())
@@ -280,7 +258,7 @@ class Workflows(TestCase):
     def test_intern_pages_and_scoping(self):
         self.client.force_login(self.intern)
         self.assertContains(self.client.get(reverse("dashboard")), "My internship")
-        for route in ("profile", "tasks", "attendance", "assessments", "imports", "inbox", "guide"):
+        for route in ("profile", "tasks", "attendance", "reviews", "imports", "inbox", "guide"):
             self.assertEqual(self.client.get(reverse(route)).status_code, 200)
         self.assertEqual(self.client.get(reverse("team")).status_code, 403)
         self.assertEqual(self.client.get(reverse("task", args=[m.Assignment.objects.filter(enrollment=self.outside).first().pk])).status_code, 404)
@@ -389,7 +367,7 @@ class Workflows(TestCase):
         today = timezone.localdate()
         result = self.client.post(reverse("new_task"), {
             "reference": "NEW-TASK-1", "task_code": "WEB-02", "title": "New manual task",
-            "enrollment": self.member.pk, "rubric": self.rubric.pk,
+            "enrollment": self.member.pk,
             "assigned_date": today, "due_date": today + timedelta(days=3),
         })
         self.assertEqual(result.status_code, 302)
@@ -397,20 +375,32 @@ class Workflows(TestCase):
         book = self.download("template", "tasks")
         book["Data"].append((
             "NEW-TASK-2", "WEB-03", "New imported task", self.member.intern.dit_id, self.member.cohort.code,
-            self.member.team.code, str(self.rubric), today.isoformat(), (today + timedelta(days=3)).isoformat(), "",
+            self.member.team.code, today.isoformat(), (today + timedelta(days=3)).isoformat(), "",
         ))
         batch, preview = self.upload_batch("tasks", book)
         self.assertContains(preview, "Confirm and commit")
         self.assertFalse(m.Assignment.objects.filter(reference="NEW-TASK-2").exists())
         self.assertEqual(self.client.post(batch).status_code, 302)
         self.assertEqual(m.Assignment.objects.get(reference="NEW-TASK-2").enrollment, self.member)
+        legacy = self.download("template", "tasks")
+        self.assertNotIn("rubric", [cell.value for cell in legacy["Data"][1]])
+        legacy["Instructions"]["B2"] = "1"
+        legacy["Data"].insert_cols(7)
+        legacy["Data"]["G1"] = "rubric"
+        legacy["Data"].append(("NEW-TASK-3", "WEB-04", "Legacy import", self.member.intern.dit_id, self.member.cohort.code,
+                               self.member.team.code, "Retired guide v1", today.isoformat(), today.isoformat(), ""))
+        batch, preview = self.upload_batch("tasks", legacy)
+        self.assertContains(preview, "1 rows passed validation")
+        self.assertEqual(self.client.post(batch).status_code, 302)
+        self.assertTrue(m.Assignment.objects.filter(reference="NEW-TASK-3").exists())
 
     def test_offline_submission_keeps_verified_date_and_coordinator_audit(self):
         self.client.force_login(self.coordinator)
         day = timezone.localdate() - timedelta(days=1)
         response = self.client.post(reverse("record_offline", args=[self.assignment.pk]), {
             "submitted_date": day, "reason": "Verified paper handoff",
-            "link": "https://example.invalid/verified",
+            "note": "Verified evidence from the intern.",
+            "artifact": SimpleUploadedFile("verified.txt", b"Verified evidence"),
         })
         self.assertEqual(response.status_code, 302)
         submission = self.assignment.submissions.get()
@@ -425,6 +415,7 @@ class Workflows(TestCase):
             row = next(cells for cells in book["Data"].iter_rows(min_row=2)
                        if cells[0].value == self.assignment.reference)
             row[1].value = "evidence.txt"
+            row[3].value = "Documented the project work."
             blob = SimpleUploadedFile("evidence.txt", b"synthetic project evidence", content_type="text/plain")
             batch, preview = self.upload_batch("submissions", book, [blob])
             self.assertContains(preview, "1 rows passed validation")
@@ -448,40 +439,69 @@ class Workflows(TestCase):
         self.assertEqual(self.client.post(batch).status_code, 200)
         self.assertFalse(self.assignment.submissions.exists())
 
-    def test_weighted_scores_remain_draft_until_published(self):
-        submission = s.submit(self.intern, self.assignment.pk, link="https://example.invalid/sample")
-        first, second = self.criteria
-        with self.assertRaises(ValidationError):
-            s.assess(self.coordinator, submission, {first.pk: (Decimal(12), "", "")})
-        draft = s.assess(self.coordinator, submission, {first.pk: (Decimal(8), "", "")})
-        self.assertIsNone(draft.total)
-        draft = s.assess(self.coordinator, submission, {second.pk: (Decimal(3), "", "")})
-        self.assertEqual(draft.total, Decimal("78.00"))
+    @override_settings(DIT_EMAIL_TRANSPORT="django", DIT_EMAIL_FROM="internships@example.invalid",
+                       EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend", DIT_MAIL_BACKGROUND=False)
+    def test_document_verification_updates_the_intern_and_team_lead(self):
         self.client.force_login(self.intern)
-        self.assertNotContains(self.client.get(reverse("task", args=[self.assignment.pk])), "78.00")
-        s.assess(self.coordinator, submission, {}, decision="passed")
-        self.assertContains(self.client.get(reverse("task", args=[self.assignment.pk])), "78.00")
+        task = reverse("task", args=[self.assignment.pk])
+        submit = reverse("submit_task", args=[self.assignment.pk])
+        self.assertContains(self.client.get(submit), "Work details")
+        self.assertContains(self.client.post(submit, {"note": "Work finished"}), "This field is required.")
+        self.assertFalse(self.assignment.submissions.exists())
+        response = self.client.post(submit, {
+            "note": "Work finished with evidence.", "artifact": SimpleUploadedFile("evidence.txt", b"Verified document"),
+        })
+        self.assertRedirects(response, task)
+        submission = self.assignment.submissions.get()
+        review = reverse("review_submission", args=[submission.pk])
+        artifact = reverse("artifact", args=[submission.pk])
+        self.assertContains(self.client.get(task), "Awaiting review")
+        self.assertEqual(self.client.post(review, {"decision": "completed"}).status_code, 403)
 
-    def test_score_import_creates_draft_and_revision_preserves_history(self):
-        submission = s.submit(self.intern, self.assignment.pk, link="https://example.invalid/sample")
+        self.client.force_login(self.lead)
+        team_page = self.client.get(reverse("team"))
+        team_row = next(item for item in team_page.context["items"] if item["assignment"].pk == self.assignment.pk)
+        self.assertFalse(team_row["complete"])
+        self.assertEqual(self.client.get(artifact).status_code, 404)
+        self.assertEqual(self.client.post(review, {"decision": "completed"}).status_code, 403)
+
         self.client.force_login(self.coordinator)
-        book = self.download("template", "scores")
-        for criterion, score in zip(self.criteria, (8, 3)):
-            book["Data"].append((self.assignment.reference, 1, criterion.code, score, "Evidence reviewed", ""))
-        batch, preview = self.upload_batch("scores", book)
-        self.assertContains(preview, "2 rows passed validation")
-        self.assertEqual(self.client.post(batch).status_code, 302)
-        evaluation = m.Evaluation.objects.get(submission=submission)
-        self.assertEqual(evaluation.total, Decimal("78.00"))
-        self.assertIsNone(evaluation.published_at)
+        page = self.client.get(review)
+        self.assertContains(page, "Work finished with evidence.")
+        self.assertContains(page, "Download document")
+        self.assertRedirects(self.client.post(review, {"decision": "completed", "feedback": "Verified the document."}), task)
+        self.assertRedirects(self.client.post(review, {"decision": "completed"}), task)
+        self.assertEqual(m.SubmissionReview.objects.filter(submission=submission).count(), 1)
+        self.assertEqual(deliver_pending(), 1)
+        self.assertEqual(mail.outbox[0].to, [self.intern.email])
+        self.assertIn("Completed", mail.outbox[0].subject)
+
+        self.client.force_login(self.intern)
+        self.assertContains(self.client.get(task), "Verified the document.")
+        self.assertContains(self.client.get(reverse("reviews")), "Completed")
+        self.client.force_login(self.lead)
+        team_page = self.client.get(reverse("team"))
+        team_row = next(item for item in team_page.context["items"] if item["assignment"].pk == self.assignment.pk)
+        self.assertEqual(team_row["status"], "Completed")
+        self.assertTrue(team_row["complete"])
+
+    def test_revision_reopens_the_task_and_retains_the_previous_review(self):
+        submission = s.submit(self.intern, self.assignment.pk, note="First version",
+                              artifact=SimpleUploadedFile("first.txt", b"First"))
         deadline = timezone.localdate() + timedelta(days=2)
-        s.assess(self.coordinator, submission, {}, decision="revision", revision_due=deadline)
-        resubmission = s.submit(self.intern, self.assignment.pk, link="https://example.invalid/revision")
+        with self.assertRaisesMessage(ValidationError, "Explain what the intern needs to revise"):
+            s.review_submission(self.coordinator, submission, decision="revision", revision_due=deadline, notify=False)
+        s.review_submission(self.coordinator, submission, decision="revision", feedback="Add the test results.",
+                            revision_due=deadline, notify=False)
+        resubmission = s.submit(self.intern, self.assignment.pk, note="Added the test results.",
+                                artifact=SimpleUploadedFile("revision.txt", b"Second"))
         self.assertEqual(resubmission.version, 2)
         self.assertEqual(resubmission.deadline, deadline)
         self.assertEqual(self.assignment.submissions.count(), 2)
         self.client.force_login(self.intern)
-        self.assertContains(self.client.get(reverse("task", args=[self.assignment.pk])), "78.00")
+        page = self.client.get(reverse("task", args=[self.assignment.pk]))
+        self.assertContains(page, "Add the test results.")
+        self.assertContains(page, "Awaiting review")
 
     def test_dashboard_and_excel_team_totals_reconcile(self):
         self.client.force_login(self.coordinator)
@@ -503,6 +523,19 @@ class Workflows(TestCase):
         self.assignment.cancelled = True
         self.assignment.save(update_fields=["cancelled"])
         self.assertEqual(r.totals(r.rows(items, today=today))["total"], 0)
+
+    def test_intern_cannot_start_or_submit_before_the_start_date(self):
+        start = timezone.localdate() + timedelta(days=1)
+        m.Assignment.objects.filter(pk=self.assignment.pk).update(assigned_date=start, due_date=start)
+        self.client.force_login(self.intern)
+        self.client.post(reverse("start_task", args=[self.assignment.pk]))
+        self.assignment.refresh_from_db()
+        self.assertFalse(self.assignment.started)
+        response = self.client.post(reverse("submit_task", args=[self.assignment.pk]), {
+            "note": "Early work", "artifact": SimpleUploadedFile("early.txt", b"Early evidence"),
+        })
+        self.assertContains(response, "This assignment is closed for submissions.")
+        self.assertFalse(self.assignment.submissions.exists())
 
     def test_session_snapshot_and_coordinator_only_marking(self):
         self.client.force_login(self.coordinator)

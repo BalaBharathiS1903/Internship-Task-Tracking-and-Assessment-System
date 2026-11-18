@@ -1,14 +1,14 @@
-# Internship Task Tracking and Assessment System
+# Internship Task Tracking and Submission Review
 
 ## 1. Architecture
 
-Build a new Python web application with three connected workflows across internship operations, attendance, and assessment. Use the old Flask application as a reference for fields, reports, and migration mapping. Build a fresh application and interface in the new workspace.
+Build a new Python web application with three connected workflows across internship operations, attendance, and submission review. Use the old Flask application as a reference for fields, reports, and migration mapping. Build a fresh application and interface in the new workspace.
 
 | Layer | Proposed choice | Responsibility |
 |---|---|---|
 | Web application | Django with server-rendered templates | Role-specific pages, forms, sessions, permissions, and validation |
 | Interface | Bootstrap, project CSS, and Chart.js | Responsive layouts, accessible forms, tables, and dashboard charts |
-| Records | PostgreSQL in development and production | Interns, cohort memberships, assignments, attendance, evaluations, and audit history |
+| Records | PostgreSQL in development and production | Interns, cohort memberships, assignments, attendance, submission reviews, and audit history |
 | Excel | `openpyxl` | Read approved `.xlsx` templates, validate rows, and generate formatted workbooks |
 | Files | Private storage | Submission artifacts, staged workbooks, and authorized downloads |
 | Scheduled work | Django management commands run by the host scheduler | Prepare reminders and follow-up lists, record job runs, and retry safely |
@@ -48,7 +48,7 @@ internship-operations/
 │   ├── tasks/               Task register, individual assignments, deadlines
 │   ├── submissions/         Intern uploads, attachments, and revision history
 │   ├── attendance/          Sessions, attendance entries, and corrections
-│   ├── assessments/         Rubric versions, scores, review, feedback, publication
+│   ├── reviews/             Submission verification, decisions, and coordinator comments
 │   ├── imports/             Prebuilt Excel templates, staging, row errors, commit history
 │   ├── reporting/           Shared metrics, dashboards, drill-downs, Excel exports
 │   └── operations/          Audit events, scheduled follow-ups, and legacy import
@@ -70,12 +70,12 @@ Each Django app owns its data models and migrations. Views and forms handle the 
 | Submission, Attachment | Each assignment can have numbered submission versions. Store submission time, source, author, and artifact references. Link reviews to the exact version. |
 | Attendance Session, Attendance Entry | One attendance record per intern per session. Track present, absent, late, excused, and unmarked, plus correction history. |
 | Team Message | Store sender, recipient, team, message, sent time, and read status. Both participants must have active memberships in that team when the message is sent, and the sender must be its designated lead. |
-| Rubric Version, Criterion, Review, Criterion Score | An assessment uses a fixed published rubric version. Each scored criterion has a value and optional comments. Record the coordinator responsible for score changes and publication, and store published results and feedback revisions. |
+| Submission review | Each submission version has at most one coordinator decision. Store Completed or Needs revision, the reviewer, the timestamp, and any comments. |
 | Import Batch, Import Row, Audit Event | Capture template version, uploader, status, source row, changes, and relevant approvals. Keep sensitive values out of routine logs. |
 
 | Role | Access |
 |---|---|
-| Coordinator | Manage approved rosters, domains, teams, attendance, and rubrics. Assign and edit tasks in the browser or by Excel import. Within authorized cohorts, review submissions, enter or bulk import scores, edit feedback, decide Passed or Needs revision, and publish results. Authorized coordinators can access private contact fields and full intern-master exports. |
+| Coordinator | Manage approved rosters, domains, teams, and attendance. Assign tasks with a start and due date in the browser or by Excel import. Verify work details and documents, then mark work Completed or Needs revision. Authorized coordinators can access private contact fields and full intern-master exports. |
 | Team lead | Use the same intern account and personal workspace. The team designation adds a read-only view of teammates' assignments, deadlines, and progress, plus the ability to send an in-app message to an individual active teammate. |
 | Intern | View own approved domain, tasks, attendance, submissions, and published results. Submit a domain preference when enabled, upload individual or bulk work for own assignments, and read team-lead messages in the inbox. |
 
@@ -97,7 +97,7 @@ flowchart TB
     Tasks --> Records
 ```
 
-Check the active team-lead designation for every team view and message send. Team progress shows only operational task and submission status. Keep contact details, attendance records, submission files, and individual scores and feedback under their existing access rules. Only the Coordinator can change another intern's official records. The lead's own submissions and preferences use the same intern permissions as other members.
+Check the active team-lead designation for every team view and message send. Team progress shows only operational task and submission status. Keep contact details, attendance records, submission files, and individual review comments under their existing access rules. Only the Coordinator can change another intern's official records. The lead's own submissions and preferences use the same intern permissions as other members.
 
 ## 4. Domain selection, entry modes, and DIT ID handling
 
@@ -153,10 +153,8 @@ The Upload Center offers a versioned `.xlsx` template for each workflow. Templat
 |---|---|
 | Intern master | Roster reference, intern name, cohort, official DIT ID if issued, preferred domain if available, domain code for manual allocation, and team code if assigned |
 | Task register | Assignment reference, task code, DIT ID, team code, assigned date, and due date |
-| Submission manifest | Eligible assignment references prefilled for the signed-in intern, plus artifact reference or link and submission note |
+| Submission manifest | Eligible assignment references prefilled for the signed-in intern, plus the attached document filename, work details, and optional project link |
 | Attendance register | Session reference, intern DIT ID, and attendance status |
-| Rubric criteria | Criterion code, description, weight, and score scale |
-| Score register | Submission reference and version, criterion code, score, and coordinator comment. Coordinator imports create drafts for the coordinator to verify and publish. |
 
 Restricted staff imports can include verified historical submission dates. Record import history and provide an error workbook with row numbers for rejected records.
 
@@ -169,37 +167,28 @@ Restricted staff imports can include verified historical submission dates. Recor
 | Task register | Validate date order and assignment scope, calculate upcoming and overdue flags | Coordinator creates or bulk assigns tasks, changes dates with a reason, and archives or cancels work. |
 | Submissions | Attach account DIT ID, validate rows/files, timestamp, flag late submissions | Intern submits one task or resubmits. Coordinator records verified offline submissions with evidence and reason. |
 | Attendance | Validate roster and calculate attendance summaries after session closure | Coordinator marks attendance in a grid or workbook and records reasons for corrections. |
-| Assessment | Validate scores, compute totals, flag missing evidence and scores, prepare per-criterion feedback drafts | Coordinator evaluates project quality, enters or imports scores, edits feedback, and explicitly publishes the decision. |
+| Submission review | Show pending reviews, record decisions, and update team completion | Coordinator verifies work details and the document, then marks the task complete or requests changes. |
 | Follow-ups | Refresh dashboards from saved rows and schedule deduplicated reminders or follow-up drafts | Coordinator exports team follow-up lists. Team lead monitors their own team and chooses when to send an individual in-app message. |
 
-## 6. Reporting and scoring rules
+## 6. Reporting and completion rules
 
 These are proposed defaults for coordinator approval. Use one reporting scope across the dashboard, drill-downs, and exports, with cohort, domain, and team filters where applicable. Give each output its scope and generation time. Use Asia/Kolkata for date-only deadlines, with the due date included.
 
-- **Status.** Track task workflow as Not started → In progress → Submitted → Reviewed. Track assessment as Pending, Passed, or Needs revision. A requested revision opens another submission cycle and preserves prior submissions and scores.
-- **Completion.** A final, published Passed decision on the current submission counts as complete. Team completion is `100 × completed assignments ÷ in-scope assignments`, excluding cancellations. Show `—` for zero assignments. Use the sum of counts for overall completion across teams.
+- **Status.** Track tasks from Not started to In progress to Awaiting review. The coordinator marks work Completed or Needs revision. A revision opens another submission cycle and preserves previous work and review comments.
+- **Completion.** The coordinator’s Completed decision on the latest submission counts as complete. Team completion is `100 × completed assignments ÷ in-scope assignments`, excluding cancellations. Show `—` for zero assignments. Use the sum of counts for overall completion across teams.
 - **Pending, overdue, and late.** Pending is every in-scope assignment awaiting completion. Overdue is a pending assignment with a submission due before today's local date and no valid submission for the current required cycle. Use the revision due date when applicable. Late submitted means the recorded submission was after its applicable deadline. Keep awaiting review and revision counts visible. Base completed/pending totals partition all in-scope assignments. Overdue is a subset of pending.
-- **Missing evaluations.** An assignment awaiting its first valid submission appears in the missing-submission queue, with overdue indicated separately. A submitted assignment with missing required criterion scores appears in the incomplete-evaluation queue.
+- **Review queue.** An assignment awaiting its first upload appears in the missing-submission queue. A submission awaiting a coordinator decision appears in the review queue.
 - **Attendance.** Summarize closed sessions for which the intern was eligible. Proposed rate is `100 × (present + late) ÷ (present + late + absent)`. Show excused and unmarked counts and flag incomplete closed sessions for correction. Display `—` with a zero denominator.
-- **Rubric setup.** Require positive weights totaling exactly 100% and a score scale per criterion with `min < max` and a permitted increment or set of values. Lock a published rubric version to the assigned assessment and retain its history.
-- **Weighted score.** Use Python `Decimal` and calculate `Σ(weight_percent × (score − min) ÷ (max − min))`. For weights of 60% and 40%, scores of 8/10 and 3/4 on zero-based scales produce `78.00/100`. Round the final total to two decimals using an explicit rounding rule and use the same published total for any configured threshold. Missing scores leave the review incomplete. A recorded zero is a valid score when the scale allows it.
-- **Feedback and results.** Generate an editable draft per criterion from the score band, rubric descriptor, and coordinator notes. The coordinator verifies the evidence, approves the wording and decision, and explicitly publishes the result. The release records the coordinator, rubric version, criterion scores, total, decision, and feedback. Interns can see their own released results. Team summaries report released-result averages with their counts and show pending evaluations separately.
 
-### Coordinator assessment flow
+### Coordinator verification flow
 
 ```mermaid
 flowchart TD
-    A[Intern submits work] --> B[Coordinator reviews evidence against the rubric]
-    B --> C[Coordinator enters scores or imports the prebuilt score template]
-    C --> D{Required scores valid and complete?}
-    D -->|No| C
-    D -->|Yes| E[System calculates total and drafts criterion feedback]
-    E --> F[Coordinator edits feedback and chooses a decision and revision deadline if needed]
-    F --> G[Coordinator confirms publication]
-    G --> H{Published decision}
-    H -->|Passed| I[Mark assignment complete]
-    H -->|Needs revision| J[Open revision cycle and show the new deadline]
-    J --> A
+    A[Coordinator assigns start and due dates] --> B[Intern enters work details and uploads a document]
+    B --> C[Coordinator checks the submission]
+    C -->|Complete| D[Intern and team lead see Completed]
+    C -->|Needs revision| E[Intern sees comments and a new deadline]
+    E --> B
 ```
 
 ## 7. Professional UI and UX
@@ -212,28 +201,28 @@ Use a shared navigation shell with a role-specific sidebar on desktop and a comp
 | Coordinator dashboard | Filter by cohort, domain, and team, see totals and progress, and open the records behind each card |
 | Domains | Manage cohort domain options and matching rules, and review suggested allocations and exceptions |
 | Intern master and teams | Search by DIT ID, choose Manual entry or Bulk import, assign domains and teams, and inspect allocation history |
-| Task tracker | Filter by team, status, deadline, and assessment. Open a task timeline with submissions and assessment history. |
+| Task tracker | Filter by team, status, deadline, and review status. Open a task timeline with submitted documents and review history. |
 | My Work and Inbox | See assignment and revision deadlines, submit once or in bulk, view published feedback, and read messages from the team lead |
 | Team Lead dashboard | Monitor teammates' work and deadlines in a read-only view and open a message composer for a selected teammate |
 | Upload center | Choose workflow → download prebuilt template → upload → validate → preview → confirm → receipt. Highlight invalid cells and provide a downloadable error workbook. |
 | Coordinator attendance register | Choose session and team, enter statuses with keyboard navigation, and review corrections |
-| Coordinator assessment workspace | Open submission evidence beside the rubric, enter or import scores, see running totals, edit feedback, and confirm publication |
+| Coordinator submission reviews | Check work details and open the uploaded document, then mark the task complete or send a revision request. |
 | Reports and guide | Coordinator filters and exports workbooks or opens the print-friendly team-lead report. Users read instructions for their workspace. |
 
 ## 8. Implementation sequence
 
 | Phase | Work | Exit check |
 |---|---|---|
-| 1. Confirm rules and build the foundation | Approve the DIT ID format and issuing authority, team scope, deadline rules, attendance rules, and scoring policy. Create Django project, PostgreSQL migrations, role checks, base layout, and synthetic fixtures. | Coordinators and interns can sign in. An intern designated as team lead gains access to their team's read-only workspace. |
+| 1. Confirm rules and build the foundation | Approve the DIT ID format and issuing authority, team scope, deadline, attendance, and review rules. Create Django project, PostgreSQL migrations, role checks, base layout, and synthetic fixtures. | Coordinators and interns can sign in. An intern designated as team lead gains access to their team's read-only workspace. |
 | 2. Roster, domains, teams, and task register | Build manual forms, prebuilt workbook templates, import staging, domain catalogue and matching, ID issuance/linking, membership history, lead designation, and assignment rules. | Coordinator can enter or import a roster, review domain matches, designate a team lead, and assign tasks to eligible interns. |
 | 3. Intern submissions and attendance | Build personalized manifests, individual and multi-file submission, version history, staff offline entry, and attendance workflows. | Cross-account and cross-team rows fail, valid retries are idempotent, and an authorized correction appears in the audit history. |
-| 4. Assessment and release | Build rubric versioning, the coordinator assessment queue, manual and Excel score entry, feedback drafts, and coordinator publication. | A coordinator can review and publish from the same account. An independent worksheet matches the totals, and interns see their own published results. |
+| 4. Submission verification | Build the review queue, document access, coordinator decisions, and intern status updates. | Only coordinators can mark work complete. Interns and team leads see the updated status in their own workspace. |
 | 5. Dashboards, messaging, and reports | Add shared reporting queries, read-only team progress, team-to-intern messaging, an intern inbox, Excel/print outputs, and scheduled follow-up jobs. | Dashboard, drill-down, and workbook totals match. A lead can message an active teammate, and that intern can read the message in their inbox. |
 | 6. Legacy migration and acceptance | Rehearse data import if a real export is available, compare counts, finish the role-based guide, exercise backups, and pilot with one cohort. | Coordinator approves reconciliation, access checks, and pilot workflows before production rollout. |
 
 ### Legacy migration
 
-The old project contains Flask/SQLite source for interns, team membership, tasks, assessments and reports. Its assessment schema stores a single score and remarks. If historical data is needed, import a coordinator-approved export or database copy through a dry-run adapter. Preserve old IDs, dates, score, and remarks. Map legacy statuses with a reviewed mapping, recompute overdue, and label old single-score assessments as historical results. Flag ambiguous team ownership or task statuses. Compare totals in the source and new application by team and assessment status before cutover. No live database or approved workbook was found in the supplied source folder.
+Use a coordinator-approved export for historical intern records and tasks. Retain IDs, dates, submitted documents, and published review comments. Map earlier passing decisions to Completed, preserve revision decisions, and reconcile completion totals before cutover.
 
 ## 9. Deliverables and acceptance tests
 
@@ -243,19 +232,16 @@ The old project contains Flask/SQLite source for interns, team membership, tasks
 | Domains and bulk template library | Domain catalogue and allocation screens, plus downloadable, versioned Excel templates in the Upload Center |
 | Dashboard | Filterable web views with team progress and drill-downs |
 | Team-lead report and messaging | Read-only team dashboard and individual in-app messages. Coordinator can generate the printable team-lead report and Excel workbook. |
-| Rubric template and score register | Versioned Excel templates and matching browser forms |
-| Results report and feedback template | Student- and team-wise Excel reports, criterion-level drafts, and intern result pages |
+| Submission review report | Coordinator decisions, review dates, comments, and team completion in Excel. |
 | User guide | In-app and repository instructions for all roles, with example workbooks and import-error resolution |
-| Validation tests | Automated scoring, workbook, permissions, and reconciliation tests |
+| Validation tests | Automated verification, workbook, permissions, and reconciliation tests |
 
 - Test duplicate and malformed DIT IDs, preserved leading zeros, unknown teams, mismatched logged-in identities, concurrent ID issuance, and exact-batch retries.
 - Test manual domain selection in the form and workbook, successful automated matching, conflicting or missing matches, inactive domains, team/domain mismatches, and domain transfers. Verify that domain-filtered dashboard totals match exports.
 - Test valid prebuilt templates, unsupported template versions, missing headers, and values pasted over dropdowns. Verify that both entry modes enforce the same rules.
 - Test due-today, overdue, late submission, cancellation, revision, a prior submission version, and a team transfer. Verify the exported and displayed counts against the same fixture rows and date.
-- Test non-100% weights, invalid scale bounds, out-of-range and off-increment scores, missing criteria, valid zero, rounding, and rubric-version history. Compare results with independent Excel calculations.
-- Verify that a coordinator can score, approve, and publish from the same account within their authorized cohort. Check that score imports remain drafts until publication and that team leads and interns lack assessment write and publication permissions.
 - Verify that only the Coordinator can assign or edit tasks through browser forms or Excel imports. Verify that a team lead can view their own team's progress and message an active teammate from their intern account. Check that team leads cannot edit teammates' records, access other teams, or send a message after losing their lead designation.
 - Test attendance uniqueness, missing marks, corrections, division by zero, and the dates that qualify an intern for a session.
-- Test direct links, exports, uploaded artifacts, staff-only personal fields, draft-result visibility, and retry-safe scheduled jobs across roles.
+- Test direct links, exports, uploaded artifacts, staff-only personal fields, review status visibility, and retry-safe scheduled jobs across roles.
 
-Before using real records, obtain the approved roster and task-register formats, the authoritative DIT ID policy, the cohort domain catalogue and matching rules, and the grading and attendance policies. Confirm the reporting definitions above with the coordinator. The plan assumes one active approved domain per intern per cohort. An intern bulk upload covers the intern's own assignments. Cohort-wide roster, attendance, task, and score imports are coordinator-only.
+Before using real records, obtain the approved roster and task-register formats, the authoritative DIT ID policy, the cohort domain catalogue and matching rules, and the review and attendance policies. Confirm the reporting definitions above with the coordinator. The plan assumes one active approved domain per intern per cohort. An intern bulk upload covers the intern's own assignments. Cohort-wide roster, attendance and task imports are coordinator-only.

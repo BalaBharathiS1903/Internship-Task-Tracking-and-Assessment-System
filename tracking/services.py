@@ -1,4 +1,3 @@
-from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 from django.contrib.auth import get_user_model
@@ -140,8 +139,6 @@ def assign_task(actor, *, enrollment, existing=None, notify=True, **values):
     if existing is None and not enrollment.team_id:
         raise ValidationError("Assign the intern to a team first.")
     assignment = existing or m.Assignment(enrollment=enrollment, team=enrollment.team, domain=enrollment.domain)
-    if existing and existing.submissions.exists() and values["rubric"].pk != existing.rubric_id:
-        raise ValidationError("The scoring guide is fixed after the first submission.")
     for field, value in values.items():
         setattr(assignment, field, value)
     save_checked(assignment)
@@ -154,8 +151,8 @@ def assign_task(actor, *, enrollment, existing=None, notify=True, **values):
 def validate_artifact(upload):
     if Path(upload.name).suffix.lower() not in FILE_EXTENSIONS:
         raise ValidationError("Choose a supported file such as PDF, DOCX, XLSX, PNG, or ZIP.")
-    if upload.size > MAX_ARTIFACT_BYTES:
-        raise ValidationError("Each submission file must be 15 MB or smaller.")
+    if not 0 < upload.size <= MAX_ARTIFACT_BYTES:
+        raise ValidationError("Choose a nonempty submission file up to 15 MB.")
 
 
 @transaction.atomic
@@ -172,12 +169,11 @@ def submit(actor, assignment_id, *, link="", note="", artifact=None, staged=None
     current = assignment.submissions.first()
     if assignment.cancelled or assignment.assigned_date > timezone.localdate() or (current and not assignment.revision_due):
         raise ValidationError("This assignment is closed for submissions.")
-    if current and current.deadline == assignment.revision_due:
-        review = getattr(current, "evaluation", None)
-        if not (review and review.decision == m.Evaluation.Decision.REVISION and review.published_at):
-            raise ValidationError("This revision has already been submitted.")
-    if not (link or artifact or staged):
-        raise ValidationError("Provide a file or an HTTPS link.")
+    note = note.strip()
+    if not note or len(note) > 4000:
+        raise ValidationError("Enter work details using up to 4,000 characters.")
+    if not (artifact or staged):
+        raise ValidationError("Upload a document for the coordinator to verify.")
     if link:
         URLValidator(schemes=["https"])(link)
     if artifact:
@@ -206,75 +202,30 @@ def submit(actor, assignment_id, *, link="", note="", artifact=None, staged=None
 
 
 @transaction.atomic
-def publish_rubric(actor, rubric):
+def review_submission(actor, submission, *, decision, feedback="", revision_due=None, notify=True):
     allow_coordinator(actor)
-    rubric = m.Rubric.objects.select_for_update().get(pk=rubric.pk)
-    criteria = list(rubric.criteria.all())
-    if sum(item.weight for item in criteria) != Decimal("100"):
-        raise ValidationError("The shares of the final score must add up to 100% before publishing.")
-    for item in criteria:
-        item.full_clean()
-    rubric.published = True
-    rubric.save(update_fields=["published"])
-    audit(actor, "rubric.published", rubric)
-
-
-@transaction.atomic
-def add_criterion(actor, rubric, **values):
-    allow_coordinator(actor)
-    rubric = m.Rubric.objects.select_for_update().get(pk=rubric.pk)
-    if rubric.published:
-        raise ValidationError("Create a new scoring guide version to change published scoring items.")
-    return save_checked(m.Criterion(rubric=rubric, **values))
-
-
-def weighted_score(criteria, scores):
-    if any(item.pk not in scores for item in criteria):
-        return None
-    score = sum(item.weight * (scores[item.pk] - item.minimum) / (item.maximum - item.minimum) for item in criteria)
-    return Decimal(score).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
-@transaction.atomic
-def assess(actor, submission, entries, *, decision="", revision_due=None):
-    allow_coordinator(actor)
-    assignment = m.Assignment.objects.select_for_update().get(pk=submission.assignment_id)
+    assignment = m.Assignment.objects.select_for_update().select_related("enrollment__intern__user").get(pk=submission.assignment_id)
     if assignment.cancelled or assignment.submissions.first() != submission:
         raise ValidationError("Open the latest submission on an active assignment.")
-    criteria = {item.pk: item for item in assignment.rubric.criteria.all()}
-    evaluation, _ = m.Evaluation.objects.get_or_create(submission=submission, defaults={"coordinator": actor})
-    if evaluation.published_at:
-        raise ValidationError("This result has already been published.")
-    for criterion_id, values in entries.items():
-        criterion = criteria.get(criterion_id)
-        if criterion is None:
-            raise ValidationError("Choose a scoring item from this submission's scoring guide.")
-        value, comment, feedback = values
-        if value < criterion.minimum or value > criterion.maximum or (value - criterion.minimum) % criterion.step:
-            raise ValidationError(f"{criterion.name}. {criterion.score_help}")
-        fraction = (value - criterion.minimum) / (criterion.maximum - criterion.minimum)
-        band = "Meets most criteria" if fraction >= Decimal("0.75") else "Review the criterion and identify improvements"
-        draft = f"{criterion.name} — {band}. {criterion.description} {comment}".strip()
-        score, _ = m.Score.objects.get_or_create(
-            evaluation=evaluation, criterion=criterion, defaults={"value": value},
-        )
-        score.value, score.comment, score.feedback = value, comment, feedback or draft
-        save_checked(score)
-    evaluation.total = weighted_score(list(criteria.values()), dict(evaluation.scores.values_list("criterion_id", "value")))
-    evaluation.coordinator = actor
-    evaluation.reviewed_at = timezone.now()
-    if decision:
-        if decision not in m.Evaluation.Decision.values or evaluation.total is None:
-            raise ValidationError("Enter every required score before publishing a valid decision.")
-        if decision == m.Evaluation.Decision.REVISION and (not revision_due or revision_due < timezone.localdate()):
+    if m.SubmissionReview.objects.filter(submission=submission).exists():
+        raise ValidationError("This submission has already been reviewed.")
+    if decision not in m.SubmissionReview.Decision.values:
+        raise ValidationError("Choose Completed or Needs revision.")
+    feedback = feedback.strip()
+    if len(feedback) > 4000:
+        raise ValidationError("Use up to 4,000 characters for review comments.")
+    if decision == m.SubmissionReview.Decision.REVISION:
+        if not feedback:
+            raise ValidationError("Explain what the intern needs to revise.")
+        if not revision_due or revision_due < timezone.localdate():
             raise ValidationError("Set a revision deadline for today or later.")
-        evaluation.decision = decision
-        evaluation.published_at = timezone.now()
-        assignment.revision_due = revision_due if decision == m.Evaluation.Decision.REVISION else None
-        assignment.save(update_fields=["revision_due"])
-    evaluation.save()
-    audit(actor, "evaluation.published" if decision else "evaluation.saved", assignment.reference)
-    return evaluation
+    review = save_checked(m.SubmissionReview(submission=submission, coordinator=actor, decision=decision, feedback=feedback))
+    assignment.revision_due = revision_due if decision == m.SubmissionReview.Decision.REVISION else None
+    assignment.save(update_fields=["revision_due"])
+    audit(actor, "submission.reviewed", assignment.reference, review.get_decision_display())
+    if notify:
+        notifications.queue_review(review, assignment.enrollment.intern.user)
+    return review
 
 
 @transaction.atomic

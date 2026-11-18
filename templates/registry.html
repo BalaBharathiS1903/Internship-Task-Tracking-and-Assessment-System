@@ -2,11 +2,10 @@
 {% block title %}Program setup{% endblock %}
 {% block crumb %}Setup{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Program setup</h1><p>Set up internship batches, domains, and scoring guides.</p></div></div>
+<div class="page-heading"><div><h1>Program setup</h1><p>Set up internship batches, domains, and teams.</p></div></div>
 <div class="card-grid">
   <section class="panel padded"><div class="split"><h2>Internship Batches</h2><a class="button secondary small" href="{% url 'setup' 'cohort' %}">Add batch</a></div><ul class="list">{% for cohort in cohorts %}<li><strong>{{ cohort.name }}</strong><small>{{ cohort.code }}{% if cohort.id_prefix %} · Local DIT prefix {{ cohort.id_prefix }}{% else %} · Official IDs only{% endif %}</small></li>{% empty %}<li>No internship batches yet.</li>{% endfor %}</ul></section>
   <section class="panel padded"><div class="split"><h2>Domains</h2><a class="button secondary small" href="{% url 'setup' 'domain' %}">Add domain</a></div><ul class="list">{% for domain in domains %}<li><strong>{{ domain }}</strong><small>{{ domain.code }}</small></li>{% empty %}<li>No domains yet.</li>{% endfor %}</ul></section>
   <section class="panel padded"><div class="split"><h2>Teams</h2><a class="button secondary small" href="{% url 'teams' %}">Manage teams</a></div><ul class="list">{% for team in teams %}<li><a class="row-title" href="{% url 'team_detail' team.pk %}">{{ team }}</a><small>{{ team.code }} · {{ team.domain }} · {{ team.cohort }}</small></li>{% empty %}<li>No teams yet.</li>{% endfor %}</ul></section>
-  <section class="panel padded"><div class="split"><h2>Scoring Guides</h2><a class="button secondary small" href="{% url 'setup' 'rubric' %}">Add scoring guide</a></div><ul class="list">{% for rubric in rubrics %}<li><a class="row-title" href="{% url 'rubric' rubric.pk %}">{{ rubric }}</a><small>{{ rubric.published|yesno:"Published,Draft" }}</small></li>{% empty %}<li>No scoring guides yet.</li>{% endfor %}</ul></section>
 </div>
 {% endblock %}

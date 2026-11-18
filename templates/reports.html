@@ -15,7 +15,7 @@
 </div>
 <section class="panel">
   <div class="panel-heading"><div><h2>Team lead reports</h2><p>Open a printable report for each team.</p></div></div>
-  <div class="table-wrap"><table><thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Total</th><th>Completed</th><th>Pending</th><th>Overdue</th><th>Assessment pending</th><th>Completion</th><th>Action</th></tr></thead>
+  <div class="table-wrap"><table><thead><tr><th>Team</th><th>Leader</th><th>Members</th><th>Total</th><th>Completed</th><th>Pending</th><th>Overdue</th><th>Awaiting review</th><th>Completion</th><th>Action</th></tr></thead>
   <tbody>{% for row in summaries %}
     <tr><td><strong>{{ row.team.name }}</strong><small>{{ row.team.cohort }}</small></td><td>{% if row.leader %}{{ row.leader.user.get_full_name }}{% else %}Unassigned{% endif %}</td>
     <td>{{ row.members }}</td><td>{{ row.counts.total }}</td><td>{{ row.counts.complete }}</td><td>{{ row.counts.pending }}</td><td>{{ row.counts.overdue }}</td><td>{{ row.counts.in_review }}</td>
