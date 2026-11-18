@@ -198,6 +198,50 @@ class Workflows(TestCase):
         self.assertIn("Example College", message.subject)
         self.assertIn("Due on:", message.body)
 
+    def test_user_management_download_only_includes_active_onboarding_passwords(self):
+        accounts = {}
+        for ref in ("CURRENT", "LEGACY", "CHANGED", "INACTIVE", "PRIVILEGED", "ACTIVATE"):
+            enrollment = s.register_intern(
+                self.coordinator, reference=ref, name=f"{ref.title()} Intern", cohort=self.member.cohort,
+                domain=self.member.domain, email=f"{ref.lower()}@example.invalid" if ref != "ACTIVATE" else "",
+            )
+            accounts[ref] = enrollment.intern.user
+        manager = get_user_model().objects.create_superuser("export-admin", password="administrator-password")
+        notices = {ref: m.EmailNotification.objects.get(user=user) for ref, user in accounts.items() if ref != "ACTIVATE"}
+        self.assertTrue(notices["CURRENT"].password_fingerprint)
+        m.EmailNotification.objects.filter(pk=notices["LEGACY"].pk).update(password_fingerprint="")
+        accounts["CHANGED"].set_password("replacement-password")
+        accounts["CHANGED"].save(update_fields=["password"])
+        accounts["INACTIVE"].is_active = False
+        accounts["INACTIVE"].save(update_fields=["is_active"])
+        accounts["PRIVILEGED"].groups.add(self.coordinator.groups.get(name="Coordinators"))
+
+        url = reverse("download_users")
+        self.client.force_login(self.intern)
+        self.assertEqual(self.client.post(url).status_code, 403)
+        self.client.force_login(self.coordinator)
+        self.assertContains(self.client.get(reverse("account_settings")), "Download users (.xlsx)")
+        self.assertEqual(self.client.get(url).status_code, 405)
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("no-store", response["Cache-Control"])
+        book = load_workbook(BytesIO(b"".join(response.streaming_content)))
+        headers, *rows = book["User management"].values
+        self.assertEqual(headers, ("Name", "Username", "Temporary password", "Password status"))
+        listed = {row[1]: row for row in rows}
+        for ref in ("CURRENT", "LEGACY"):
+            self.assertEqual(listed[accounts[ref].username], (
+                accounts[ref].get_full_name(), accounts[ref].username, temporary_password(notices[ref]), "Change at first sign-in",
+            ))
+        for ref in ("CHANGED", "INACTIVE", "PRIVILEGED", "ACTIVATE"):
+            self.assertIsNone(listed[accounts[ref].username][2])
+        self.assertEqual(listed[accounts["ACTIVATE"].username][3], "Activation required")
+        self.assertIsNone(listed[manager.username][2])
+        event = m.AuditEvent.objects.get(verb="account.credentials_exported")
+        self.assertEqual(event.actor, self.coordinator)
+        self.assertIn("2 temporary passwords", event.detail)
+        self.assertNotIn(temporary_password(notices["CURRENT"]), event.detail)
+
     def test_settings_protects_other_coordinators_and_logs_activity(self):
         another = get_user_model().objects.create_user("another-coordinator")
         another.groups.add(self.coordinator.groups.get(name="Coordinators"))

@@ -304,3 +304,4 @@ class EmailNotification(models.Model):
     next_attempt_at = models.DateTimeField(default=timezone.now, db_index=True)
     attempts = models.PositiveIntegerField(default=0)
     last_error = models.CharField(max_length=180, blank=True)
+    password_fingerprint = models.CharField(max_length=64, blank=True)

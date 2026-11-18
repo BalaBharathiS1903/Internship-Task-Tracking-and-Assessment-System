@@ -21,7 +21,9 @@
   </section>
   {% if coordinator %}
   <section class="panel settings-management">
-    <div class="panel-heading"><h2>User management</h2></div>
+    <div class="panel-heading"><div><h2>User management</h2><p>Downloads include temporary passwords for interns who still need to change them.</p></div>
+      <form method="post" action="{% url 'download_users' %}">{% csrf_token %}<button class="button secondary small" type="submit">{% include "icon.html" with name="download" only %} Download users (.xlsx)</button></form>
+    </div>
     <div class="table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>College</th><th>Team</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>{% for entry in accounts %}
       <tr><td><strong>{{ entry.user.get_full_name|default:entry.user.username }}</strong><small>{{ entry.user.username }}</small></td>

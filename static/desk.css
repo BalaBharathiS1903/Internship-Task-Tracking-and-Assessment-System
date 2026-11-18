@@ -236,9 +236,11 @@ input[readonly], input:disabled, select:disabled { background: #edf3f5; color: #
 .login-form label[for="id_password"] { margin-top: .65rem; }
 .login-form .button { width: 100%; margin-top: 1rem; }
 .login-form .company-link { margin: 1.3rem 0 0; }
-.password-entry { position: relative; }
-.password-entry:has(.password-toggle:not([hidden])) input { padding-right: 3.3rem; }
-.password-toggle { position: absolute; right: 1px; inset-block: 1px; display: grid; place-items: center; width: 46px; border: 0; border-left: 1px solid var(--line); border-radius: 0 7px 7px 0; background: var(--white); color: var(--brand-blue-dark); }
+.password-entry { display: flex; }
+.password-entry input { min-width: 0; }
+.password-entry:has(.password-toggle:not([hidden])) input { border-start-end-radius: 0; border-end-end-radius: 0; }
+.password-entry:has(.password-toggle:not([hidden])) input::-ms-reveal { display: none; }
+.password-toggle { display: grid; place-items: center; flex: 0 0 46px; border: 1px solid var(--line); border-inline-start: 0; border-radius: 0 .5rem .5rem 0; background: var(--white); color: var(--brand-blue-dark); }
 .password-toggle span { display: flex; }
 .password-toggle[hidden], .password-toggle[aria-pressed="false"] .password-hidden-icon,
 .password-toggle[aria-pressed="true"] .password-visible-icon { display: none; }

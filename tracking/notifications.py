@@ -6,13 +6,14 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.contrib.auth.hashers import check_password
 from django.core.mail import EmailMessage
 from django.db import close_old_connections, transaction
 from django.db.models import F
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.crypto import salted_hmac
+from django.utils.crypto import constant_time_compare, salted_hmac
 
 from .models import EmailNotification as Notice
 
@@ -38,12 +39,31 @@ def temporary_password(notice):
                               algorithm="sha256").hexdigest()[:24]
 
 
+def password_fingerprint(encoded_password):
+    return salted_hmac("intern-welcome-password-fingerprint", encoded_password, algorithm="sha256").hexdigest()
+
+
+def active_welcome_password(notice):
+    user = notice.user
+    intern = getattr(user, "intern", None)
+    if (notice.kind != Notice.Kind.WELCOME or notice.closed_at or not user.is_active or
+            user.email != notice.recipient or not intern or not intern.must_change_password):
+        return ""
+    password = temporary_password(notice)
+    matches_fingerprint = notice.password_fingerprint and constant_time_compare(
+        notice.password_fingerprint, password_fingerprint(user.password),
+    )
+    return password if matches_fingerprint or check_password(password, user.password) else ""
+
+
 def queue_welcome(intern):
     user = intern.user
     if not user.email:
         return
-    notice = Notice.objects.create(kind=Notice.Kind.WELCOME, user=user, recipient=user.email)
+    notice = Notice(kind=Notice.Kind.WELCOME, user=user, recipient=user.email)
     user.set_password(temporary_password(notice))
+    notice.password_fingerprint = password_fingerprint(user.password)
+    notice.save()
     user.save(update_fields=["password"])
     intern.must_change_password = True
     intern.save(update_fields=["must_change_password"])
@@ -62,12 +82,11 @@ def email_content(notice):
         return None
     context = {"name": user.get_full_name() or user.username}
     if notice.kind == Notice.Kind.WELCOME:
-        intern = getattr(user, "intern", None)
-        password = temporary_password(notice)
-        if not intern or not intern.must_change_password or not user.check_password(password):
+        password = active_welcome_password(notice)
+        if not password:
             return None
         subject = "Your Internship Desk login | DIT Internship"
-        context.update(username=user.username, temporary_password=password, dit_id=intern.dit_id,
+        context.update(username=user.username, temporary_password=password, dit_id=user.intern.dit_id,
                        login_url=settings.DIT_PUBLIC_URL.rstrip("/") + reverse("login"))
         template = "email/intern_welcome.txt"
     else:

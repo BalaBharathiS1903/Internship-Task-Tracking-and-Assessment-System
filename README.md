@@ -28,6 +28,8 @@ Every workbook includes an example and version metadata. Fill its Data sheet and
 
 Settings includes account details, password changes, coordinator user management, Team Lead designation, recent activity, and email delivery status. When a new intern record has an email address, the app generates a username and a temporary password and queues a welcome email. The intern must change the temporary password at first sign-in. Records without email can use the private activation link in Intern Master.
 
+Coordinators can download user names, usernames, and valid onboarding passwords from User management. The password status column shows which accounts require activation or already have a password set.
+
 Each newly assigned task queues a separate email to the assigned intern, including the task code, title, due date, instructions, and the assignment link. Workbook previews and task edits do not send mail.
 
 On Render, set `DIT_EMAIL_FROM` to a verified Resend sender such as `DefineInfoTech Internship Desk <internships@your-verified-domain.example>` and set `DIT_RESEND_API_KEY` in the service's Environment page. `DIT_PUBLIC_URL` overrides the portal URL for email links when using a custom domain. Render's free web service blocks standard SMTP ports, so the default transport uses Resend over HTTPS.

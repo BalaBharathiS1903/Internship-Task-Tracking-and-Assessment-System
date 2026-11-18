@@ -7,15 +7,19 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
+from openpyxl import Workbook
 
+from . import workbooks
 from .access import coordinator_required, intern_profile, is_coordinator
 from .models import AuditEvent, EmailNotification, Enrollment, Team
-from .notifications import delivery_enabled, pending_notices, wake_delivery
+from .notifications import active_welcome_password, delivery_enabled, pending_notices, wake_delivery
 from .services import audit, update_enrollment
 
 
@@ -154,6 +158,46 @@ def account_settings(request):
             notices=EmailNotification.objects.order_by("-created_at")[:12],
         )
     return render(request, "account_settings.html", context)
+
+
+@coordinator_required
+@require_POST
+@never_cache
+def download_users(request):
+    notices = EmailNotification.objects.filter(
+        kind=EmailNotification.Kind.WELCOME, closed_at__isnull=True, recipient=F("user__email"),
+        user__is_active=True, user__is_staff=False, user__is_superuser=False, user__intern__must_change_password=True,
+    ).exclude(user__groups__name="Coordinators").select_related("user__intern").order_by("user_id", "-created_at", "-pk")
+    latest = {}
+    for notice in notices:
+        latest.setdefault(notice.user_id, notice)
+
+    rows = [("Name", "Username", "Temporary password", "Password status")]
+    password_count = 0
+    for user in get_user_model().objects.select_related("intern").order_by("username"):
+        notice = latest.get(user.pk)
+        password = active_welcome_password(notice) if notice else ""
+        if not user.is_active:
+            status = "Inactive"
+        elif password:
+            status = "Change at first sign-in"
+            password_count += 1
+        elif not user.has_usable_password():
+            status = "Activation required"
+        elif intern_profile(user) and user.intern.must_change_password:
+            status = "Temporary password unavailable"
+        else:
+            status = "Password set"
+        rows.append((user.get_full_name() or user.username, user.username, password, status))
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "User management"
+    workbooks.add_rows(sheet, rows)
+    workbooks.style(sheet)
+    audit(request.user, "account.credentials_exported", "User management",
+          f"{len(rows) - 1} accounts; {password_count} temporary passwords")
+    return workbooks.workbook_response(book, f"user-management-{timezone.localdate()}.xlsx")
 
 
 @coordinator_required
