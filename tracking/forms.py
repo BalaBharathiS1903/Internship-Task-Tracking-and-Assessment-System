@@ -45,18 +45,34 @@ class EnrollmentForm(InternDetailsForm):
         self.fields["team"].queryset = m.Team.objects.filter(cohort=enrollment.cohort)
 
 
+class AssignmentTeamChoice(forms.ModelChoiceField):
+    def label_from_instance(self, team):
+        return f"{team.name} ({team.code}) · {team.cohort}"
+
+
 class AssignmentForm(forms.Form):
     reference = forms.CharField(max_length=40, label="Assignment reference")
     task_code = forms.CharField(max_length=40)
     title = forms.CharField(max_length=150)
     enrollment = forms.ModelChoiceField(
-        label="Intern and internship batch", queryset=m.Enrollment.objects.filter(team__isnull=False).select_related("intern__user", "cohort"),
+        label="Intern and internship batch", required=False,
+        queryset=m.Enrollment.objects.filter(team__isnull=False).select_related("intern__user", "cohort"),
+    )
+    team = AssignmentTeamChoice(
+        queryset=m.Team.objects.select_related("cohort").order_by("name", "cohort__name", "code"),
+        required=False, help_text="Assign to every current member of this team.",
     )
     assigned_date = forms.DateField(widget=DateInput(), label="Start date")
     due_date = forms.DateField(widget=DateInput())
     instructions = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), required=False)
     cancelled = forms.BooleanField(required=False, label="Cancel this assignment")
     reason = forms.CharField(max_length=180, required=False, label="Reason for change")
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.fields.get("team") and not self.errors and bool(cleaned.get("team")) == bool(cleaned.get("enrollment")):
+            raise forms.ValidationError("Choose either a team or an individual intern.")
+        return cleaned
 
 
 class SubmissionForm(forms.Form):

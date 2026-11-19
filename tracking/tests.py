@@ -394,6 +394,39 @@ class Workflows(TestCase):
         self.assertEqual(self.client.post(batch).status_code, 302)
         self.assertTrue(m.Assignment.objects.filter(reference="NEW-TASK-3").exists())
 
+    def test_team_task_appears_in_each_members_own_work(self):
+        team = self.member.team
+        self.client.force_login(self.coordinator)
+        response = self.client.post(reverse("new_task"), {
+            "reference": "TEAM-WEB-01", "task_code": "TEAM-WEB-01", "title": "Team website task",
+            "team": team.pk, "assigned_date": timezone.localdate(), "due_date": timezone.localdate(),
+        })
+        self.assertRedirects(response, f"{reverse('tasks')}?team={team.pk}")
+        assignments = m.Assignment.objects.filter(task_code="TEAM-WEB-01")
+        self.assertCountEqual(assignments.values_list("enrollment_id", flat=True),
+                              team.enrollment_set.values_list("pk", flat=True))
+        self.assertGreater(assignments.count(), 1)
+
+        for assignment in assignments.select_related("enrollment__intern__user"):
+            with self.subTest(member=assignment.enrollment_id):
+                self.client.force_login(assignment.enrollment.intern.user)
+                self.assertContains(self.client.get(reverse("tasks")), assignment.title)
+                self.assertContains(self.client.get(reverse("task", args=[assignment.pk])), assignment.title)
+
+        self.client.force_login(self.intern)
+        own = assignments.get(enrollment=self.member)
+        teammate = assignments.exclude(pk=own.pk).first()
+        self.assertEqual(self.client.get(reverse("task", args=[teammate.pk])).status_code, 404)
+        self.assertRedirects(self.client.post(reverse("start_task", args=[own.pk])), reverse("task", args=[own.pk]))
+        own.refresh_from_db()
+        teammate.refresh_from_db()
+        self.assertTrue(own.started)
+        self.assertFalse(teammate.started)
+
+        self.client.force_login(self.outside.intern.user)
+        self.assertNotContains(self.client.get(reverse("tasks")), own.title)
+        self.assertEqual(self.client.get(reverse("task", args=[own.pk])).status_code, 404)
+
     def test_offline_submission_keeps_verified_date_and_coordinator_audit(self):
         self.client.force_login(self.coordinator)
         day = timezone.localdate() - timedelta(days=1)

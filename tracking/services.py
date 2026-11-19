@@ -148,6 +148,22 @@ def assign_task(actor, *, enrollment, existing=None, notify=True, **values):
     return assignment
 
 
+@transaction.atomic
+def assign_team_task(actor, *, team, reference, **values):
+    allow_coordinator(actor)
+    members = list(team.enrollment_set.select_related("intern__user").order_by("pk"))
+    if not members:
+        raise ValidationError("Add members to this team before assigning it a task.")
+
+    assignments = []
+    max_length = m.Assignment._meta.get_field("reference").max_length
+    for index, member in enumerate(members):
+        suffix = f"-{member.pk}" if index else ""
+        member_reference = reference[:max_length - len(suffix)] + suffix
+        assignments.append(assign_task(actor, enrollment=member, reference=member_reference, **values))
+    return assignments
+
+
 def validate_artifact(upload):
     if Path(upload.name).suffix.lower() not in FILE_EXTENSIONS:
         raise ValidationError("Choose a supported file such as PDF, DOCX, XLSX, PNG, or ZIP.")

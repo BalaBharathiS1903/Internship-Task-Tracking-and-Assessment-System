@@ -230,15 +230,27 @@ def assignment_form(request, pk=None):
                if assignment and hasattr(assignment, name)}
     form = f.AssignmentForm(request.POST or None, initial=initial)
     if assignment:
+        del form.fields["team"]
         form.fields["reference"].disabled = True
         form.fields["enrollment"].queryset = m.Enrollment.objects.filter(pk=assignment.enrollment_id)
         form.fields["enrollment"].disabled = True
+        form.fields["enrollment"].required = True
         form.fields["reason"].required = True
     if request.method == "POST" and form.is_valid():
         values = form.cleaned_data.copy()
         reason = values.pop("reason")
+        team = values.pop("team", None)
         values["reference"] = values["reference"].upper()
         try:
+            if team:
+                values.pop("enrollment")
+                with transaction.atomic():
+                    items = s.assign_team_task(request.user, team=team, **values)
+                    if reason:
+                        for item in items:
+                            s.audit(request.user, "assignment.reason", item.reference, reason)
+                messages.success(request, f"Task assigned to {len(items)} members of {team.name}.")
+                return redirect(f"{reverse('tasks')}?team={team.pk}")
             with transaction.atomic():
                 locked = m.Assignment.objects.select_for_update().get(pk=pk) if pk else None
                 item = s.assign_task(request.user, existing=locked, **values)
