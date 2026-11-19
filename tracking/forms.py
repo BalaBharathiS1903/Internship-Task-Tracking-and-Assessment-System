@@ -87,6 +87,14 @@ class OfflineSubmissionForm(SubmissionForm):
     reason = forms.CharField(max_length=200, label="Reason for recording offline")
 
 
+class ManualReviewForm(forms.Form):
+    completed = forms.TypedChoiceField(
+        label="Review status", choices=[("pending", "Not submitted"), ("completed", "Completed")],
+        coerce=lambda value: value == "completed",
+    )
+    marks = m.Assignment._meta.get_field("marks").formfield(label="Marks out of 100", min_value=0, max_value=100)
+
+
 class SubmissionReviewForm(forms.Form):
     decision = forms.ChoiceField(label="Review decision", choices=[("", "Choose a decision"), *m.SubmissionReview.Decision.choices])
     feedback = forms.CharField(label="Review comments", required=False, max_length=4000,
@@ -94,6 +102,9 @@ class SubmissionReviewForm(forms.Form):
                                help_text="The intern can see these comments. Explain what to change if you request a revision.")
     revision_due = forms.DateField(label="Revision deadline", required=False, widget=DateInput(),
                                    help_text="Required for a revision request.")
+    marks = m.Assignment._meta.get_field("marks").formfield(
+        label="Marks out of 100", min_value=0, max_value=100, help_text="Optional when marking the assignment complete.",
+    )
 
 
 class AttendanceForm(forms.Form):

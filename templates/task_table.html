@@ -9,7 +9,19 @@
       <td>{{ item.deadline|date:"j M Y" }}</td>
       {% if detailed %}<td>{{ item.submission.submitted_at|date:"j M Y"|default:"—" }}</td>{% endif %}
       <td><span class="badge {{ item.tone }}">{% if item.overdue %}Overdue{% else %}{{ item.status }}{% endif %}</span>{% if item.late %}<small>Submitted late</small>{% endif %}</td>
-      {% if detailed %}<td>{{ item.review_status }}</td>{% endif %}
+      {% if detailed %}<td>
+        {% if item.manual_review_form %}
+        <form class="stack manual-review" method="post" action="{% url 'manual_review' item.assignment.pk %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">
+          {% csrf_token %}
+          <label class="sr-only" for="{{ item.manual_review_form.completed.id_for_label }}">Review status for {{ item.assignment.reference }}</label>
+          {{ item.manual_review_form.completed }}
+          {{ item.manual_review_form.marks.as_field_group }}
+          <button type="submit" class="button secondary small">Save review</button>
+        </form>
+        {% else %}
+        {{ item.review_status }}{% if item.assignment.marks != None %}<small>{{ item.assignment.marks }} / 100</small>{% endif %}
+        {% endif %}
+      </td>{% endif %}
       <td><a href="{% url 'task' item.assignment.pk %}" aria-label="Open {{ item.assignment.reference }}">→</a></td>
     </tr>
   {% empty %}<tr><td colspan="{% if detailed %}10{% elif coordinator %}7{% else %}4{% endif %}" class="empty">No assignments match this view.</td></tr>{% endfor %}

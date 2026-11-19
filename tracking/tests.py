@@ -502,7 +502,9 @@ class Workflows(TestCase):
         page = self.client.get(review)
         self.assertContains(page, "Work finished with evidence.")
         self.assertContains(page, "Download document")
-        self.assertRedirects(self.client.post(review, {"decision": "completed", "feedback": "Verified the document."}), task)
+        self.assertRedirects(self.client.post(review, {
+            "decision": "completed", "feedback": "Verified the document.", "marks": "87.50",
+        }), task)
         self.assertRedirects(self.client.post(review, {"decision": "completed"}), task)
         self.assertEqual(m.SubmissionReview.objects.filter(submission=submission).count(), 1)
         self.assertEqual(deliver_pending(), 1)
@@ -511,12 +513,51 @@ class Workflows(TestCase):
 
         self.client.force_login(self.intern)
         self.assertContains(self.client.get(task), "Verified the document.")
+        self.assertContains(self.client.get(task), "87.50 / 100")
         self.assertContains(self.client.get(reverse("reviews")), "Completed")
         self.client.force_login(self.lead)
         team_page = self.client.get(reverse("team"))
         team_row = next(item for item in team_page.context["items"] if item["assignment"].pk == self.assignment.pk)
         self.assertEqual(team_row["status"], "Completed")
         self.assertTrue(team_row["complete"])
+
+    def test_coordinator_can_complete_grade_and_reopen_unsubmitted_work(self):
+        pk = self.assignment.pk
+        task = reverse("task", args=[pk])
+        tasks = reverse("tasks")
+        review = reverse("manual_review", args=[pk])
+        payload = {f"review-{pk}-completed": "completed", f"review-{pk}-marks": "0"}
+        self.client.force_login(self.intern)
+        self.assertEqual(self.client.post(review, payload).status_code, 403)
+
+        self.client.force_login(self.coordinator)
+        self.assertContains(self.client.get(tasks), review)
+        self.client.post(review, {**payload, f"review-{pk}-marks": "101"})
+        self.assignment.refresh_from_db()
+        self.assertFalse(self.assignment.manually_completed)
+        self.assertRedirects(self.client.post(review, payload), tasks)
+        self.assertFalse(self.assignment.submissions.exists())
+
+        self.client.force_login(self.intern)
+        detail = self.client.get(task)
+        self.assertContains(detail, "Completed")
+        self.assertContains(detail, "0.00 / 100")
+        self.assertNotContains(detail, "Submit work")
+        with self.assertRaisesMessage(ValidationError, "closed for submissions"):
+            s.submit(self.intern, pk)
+        self.assertContains(self.client.get(tasks, {"state": "complete"}), self.assignment.reference)
+        self.assertNotContains(self.client.get(tasks, {"state": "missing_submission"}), self.assignment.reference)
+
+        self.client.force_login(self.coordinator)
+        self.assertRedirects(self.client.post(review, {**payload, f"review-{pk}-completed": "pending"}), tasks)
+        self.assignment.refresh_from_db()
+        self.assertFalse(self.assignment.manually_completed)
+        self.assertIsNone(self.assignment.marks)
+        s.submit(self.intern, pk, note="Online submission", artifact=SimpleUploadedFile("work.txt", b"Work"))
+        response = self.client.post(review, payload, follow=True)
+        self.assertContains(response, "Manual completion is available for active assignments without a submission.")
+        self.assignment.refresh_from_db()
+        self.assertFalse(self.assignment.manually_completed)
 
     def test_revision_reopens_the_task_and_retains_the_previous_review(self):
         submission = s.submit(self.intern, self.assignment.pk, note="First version",

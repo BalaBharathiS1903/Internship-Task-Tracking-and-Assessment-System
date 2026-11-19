@@ -183,6 +183,8 @@ td.empty { text-align: center; padding: 2.2rem 1rem; }
 .form-width { width: min(100%, 745px); }
 .public .form-width { margin-inline: auto; }
 .stack { display: grid; gap: 1rem; }
+.manual-review { gap: .4rem; min-width: 9rem; }
+.manual-review button { justify-self: start; }
 .stack p { display: grid; gap: .3rem; }
 .form-width-grid { max-width: 900px; width: 100%; }
 .record-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.2rem; }

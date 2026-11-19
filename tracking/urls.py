@@ -23,6 +23,7 @@ urlpatterns = [
     path("tasks/<int:pk>/start/", v.start_task, name="start_task"),
     path("tasks/<int:pk>/submit/", v.submit_task, name="submit_task"),
     path("tasks/<int:pk>/record-offline/", v.record_offline, name="record_offline"),
+    path("tasks/<int:pk>/manual-review/", v.manual_review, name="manual_review"),
     path("files/<int:pk>/", v.download_artifact, name="artifact"),
     path("reviews/", v.reviews, name="reviews"),
     path("reviews/<int:pk>/", v.review_submission, name="review_submission"),

@@ -183,7 +183,8 @@ def submit(actor, assignment_id, *, link="", note="", artifact=None, staged=None
     elif assignment.enrollment.intern.user_id != actor.pk:
         raise PermissionDenied
     current = assignment.submissions.first()
-    if assignment.cancelled or assignment.assigned_date > timezone.localdate() or (current and not assignment.revision_due):
+    if (assignment.cancelled or assignment.manually_completed or assignment.assigned_date > timezone.localdate()
+            or (current and not assignment.revision_due)):
         raise ValidationError("This assignment is closed for submissions.")
     note = note.strip()
     if not note or len(note) > 4000:
@@ -218,7 +219,22 @@ def submit(actor, assignment_id, *, link="", note="", artifact=None, staged=None
 
 
 @transaction.atomic
-def review_submission(actor, submission, *, decision, feedback="", revision_due=None, notify=True):
+def review_without_submission(actor, assignment_id, *, completed, marks):
+    allow_coordinator(actor)
+    assignment = m.Assignment.objects.select_for_update().get(pk=assignment_id)
+    if assignment.cancelled or assignment.submissions.exists():
+        raise ValidationError("Manual completion is available for active assignments without a submission.")
+    assignment.manually_completed = completed
+    assignment.marks = m.Assignment._meta.get_field("marks").clean(marks, assignment) if completed else None
+    assignment.save(update_fields=["manually_completed", "marks"])
+    detail = "Completed" if completed else "Not submitted"
+    if assignment.marks is not None:
+        detail += f" · {assignment.marks}/100"
+    audit(actor, "assignment.manually_reviewed", assignment.reference, detail)
+
+
+@transaction.atomic
+def review_submission(actor, submission, *, decision, feedback="", revision_due=None, marks=None, notify=True):
     allow_coordinator(actor)
     assignment = m.Assignment.objects.select_for_update().select_related("enrollment__intern__user").get(pk=submission.assignment_id)
     if assignment.cancelled or assignment.submissions.first() != submission:
@@ -227,6 +243,8 @@ def review_submission(actor, submission, *, decision, feedback="", revision_due=
         raise ValidationError("This submission has already been reviewed.")
     if decision not in m.SubmissionReview.Decision.values:
         raise ValidationError("Choose Completed or Needs revision.")
+    if marks is not None and decision != m.SubmissionReview.Decision.COMPLETED:
+        raise ValidationError("Enter marks when marking the assignment complete.")
     feedback = feedback.strip()
     if len(feedback) > 4000:
         raise ValidationError("Use up to 4,000 characters for review comments.")
@@ -237,7 +255,8 @@ def review_submission(actor, submission, *, decision, feedback="", revision_due=
             raise ValidationError("Set a revision deadline for today or later.")
     review = save_checked(m.SubmissionReview(submission=submission, coordinator=actor, decision=decision, feedback=feedback))
     assignment.revision_due = revision_due if decision == m.SubmissionReview.Decision.REVISION else None
-    assignment.save(update_fields=["revision_due"])
+    assignment.marks = m.Assignment._meta.get_field("marks").clean(marks, assignment)
+    assignment.save(update_fields=["revision_due", "marks"])
     audit(actor, "submission.reviewed", assignment.reference, review.get_decision_display())
     if notify:
         notifications.queue_review(review, assignment.enrollment.intern.user)

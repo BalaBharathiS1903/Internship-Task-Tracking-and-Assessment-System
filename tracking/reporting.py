@@ -22,7 +22,8 @@ def records(queryset=None):
 def describe(assignment, today):
     current = assignment.versions[0] if assignment.versions else None
     review = getattr(current, "review", None) if current else None
-    complete = bool(review and review.decision == m.SubmissionReview.Decision.COMPLETED and not assignment.cancelled)
+    reviewed_complete = review and review.decision == m.SubmissionReview.Decision.COMPLETED
+    complete = not assignment.cancelled and bool(assignment.manually_completed or reviewed_complete)
     deadline = assignment.revision_due or assignment.due_date
     awaiting = bool(not current or assignment.revision_due)
     overdue = not assignment.cancelled and not complete and awaiting and deadline < today
@@ -31,6 +32,8 @@ def describe(assignment, today):
         status = "In progress"
     if current:
         status = review.get_decision_display() if review else "Awaiting review"
+    if complete:
+        status = "Completed"
     if assignment.cancelled:
         status = "Cancelled"
     return {
@@ -41,12 +44,15 @@ def describe(assignment, today):
         "complete": complete,
         "overdue": overdue,
         "late": bool(current and timezone.localdate(current.submitted_at) > current.deadline),
-        "can_submit": awaiting and not assignment.cancelled and assignment.assigned_date <= today,
+        "can_submit": awaiting and not complete and not assignment.cancelled and assignment.assigned_date <= today,
+        "can_review_manually": not current and not assignment.cancelled,
         "status": status,
-        "review_status": review.get_decision_display() if review else "Awaiting review" if current else "Not submitted",
+        "review_status": "Completed" if complete else (
+            review.get_decision_display() if review else "Awaiting review" if current else "Not submitted"
+        ),
         "tone": "green" if complete else "orange" if overdue else "blue" if current else "muted",
         "pending": not assignment.cancelled and not complete,
-        "missing_submission": not assignment.cancelled and not current,
+        "missing_submission": not assignment.cancelled and not complete and not current,
     }
 
 

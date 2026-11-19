@@ -3,7 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
@@ -113,6 +113,11 @@ class Assignment(models.Model):
     revision_due = models.DateField(null=True, blank=True)
     cancelled = models.BooleanField(default=False)
     started = models.BooleanField(default=False)
+    manually_completed = models.BooleanField(default=False)
+    marks = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
 
     class Meta:
         constraints = [

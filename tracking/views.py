@@ -213,7 +213,34 @@ def tasks(request):
         form.is_valid()
     items = fl.task_rows(items, form.cleaned_data if form else {}, request.GET.get("state"), sort_newest=coordinator)
     page = Paginator(items, 20).get_page(request.GET.get("page"))
+    if coordinator:
+        for item in page:
+            if item["can_review_manually"]:
+                assignment = item["assignment"]
+                item["manual_review_form"] = f.ManualReviewForm(prefix=f"review-{assignment.pk}", initial={
+                    "completed": "completed" if assignment.manually_completed else "pending",
+                    "marks": assignment.marks,
+                })
     return render(request, "tasks.html", {"items": page, "page": page, "task_filters": form})
+
+
+@coordinator_required
+@require_POST
+def manual_review(request, pk):
+    get_object_or_404(m.Assignment, pk=pk)
+    form = f.ManualReviewForm(request.POST, prefix=f"review-{pk}")
+    if form.is_valid():
+        try:
+            s.review_without_submission(request.user, pk, **form.cleaned_data)
+            messages.success(request, "Review status saved.")
+        except ValidationError as exc:
+            form_error(form, exc)
+    for error in form.errors.values():
+        for message in error:
+            messages.error(request, message)
+    url = reverse("tasks")
+    query = request.GET.urlencode()
+    return redirect(f"{url}?{query}" if query else url)
 
 
 def task_for(user, pk):
@@ -277,7 +304,8 @@ def task_detail(request, pk):
 def start_task(request, pk):
     assignments = own_assignments(request.user, m.Assignment.objects)
     get_object_or_404(assignments, pk=pk)
-    assignments.filter(pk=pk, cancelled=False, assigned_date__lte=timezone.localdate(), submissions__isnull=True).update(started=True)
+    assignments.filter(pk=pk, cancelled=False, manually_completed=False,
+                       assigned_date__lte=timezone.localdate(), submissions__isnull=True).update(started=True)
     return redirect("task", pk=pk)
 
 
@@ -683,13 +711,13 @@ def export(request, kind):
                                         review.feedback if review else "")])
         else:
             w.add_rows(sheet, [("Assignment", "Task", "DIT ID", "College", "Team", "Domain", "Start date", "Due date", "Submitted",
-                                "Status", "Review status", "Overdue", "Late")])
+                                "Status", "Review status", "Overdue", "Late", "Marks out of 100")])
             selected = {"follow-up": "pending", "completed": "complete", "overdue": "overdue"}.get(kind)
             display = [item for item in items if item[selected] and not item["assignment"].cancelled] if selected else items
             w.add_rows(sheet, [(a.reference, a.title, a.enrollment.intern.dit_id, a.enrollment.intern.college, a.team.name, a.domain.name,
                                 a.assigned_date.isoformat(), item["deadline"].isoformat(),
                                 timezone.localtime(item["submission"].submitted_at).isoformat() if item["submission"] else "",
-                                item["status"], item["review_status"], item["overdue"], item["late"])
+                                item["status"], item["review_status"], item["overdue"], item["late"], a.marks)
                                for item in display for a in [item["assignment"]]])
             summary = book.create_sheet("Team Totals")
             w.add_rows(summary, [("Internship batch", "Team", "Assignments", "Completed", "Pending", "Overdue", "Completion %")])
